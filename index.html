@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lottologic — LOTTO ULTIMATE 우주 최강 로또 예측 시스템</title>
+<meta name="description" content="32종 알고리즘 + 6대 방법론 통합 로또 분석 엔진. GitHub Actions가 매주 자동 실행한 결과를 표시합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ── 토큰: 배경은 추첨기 내부의 어두운 남색, 공 색은 동행복권 실제 볼 색상 ── */
+:root{
+  --bg:#0F1B33; --bg2:#16264A; --ink:#F2F5FB; --ink2:#A7B4CF; --line:rgba(255,255,255,.10);
+  --b1:#FBC400; --b2:#69C8F2; --b3:#FF7272; --b4:#AAAAAA; --b5:#B0D840;
+  --good:#7FE0A8; --warn:#FFC978;
+  --font:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.55}
+body{padding:0 20px 80px}
+a{color:var(--b2)}
+main{max-width:980px;margin:0 auto}
+
+/* ── 헤더 ── */
+header{padding:48px 0 28px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:clamp(28px,5vw,44px);font-weight:900;letter-spacing:-.02em;line-height:1.1}
+header p{margin:10px 0 0;color:var(--ink2);max-width:60ch}
+.meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:18px;font-size:14px;color:var(--ink2)}
+.meta b{color:var(--ink);font-weight:500}
+
+section{padding:36px 0;border-bottom:1px solid var(--line)}
+h2{margin:0 0 6px;font-size:20px;font-weight:700}
+.sub{margin:0 0 20px;color:var(--ink2);font-size:14px}
+
+/* ── 추천 세트: 공은 실물처럼, 이것이 페이지의 주인공 ── */
+.sets{display:grid;gap:12px}
+.set{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:14px;padding:14px 16px;
+     background:var(--bg2);border-radius:14px}
+.set .no{font-size:15px;color:var(--ink2);font-weight:500}
+.balls{display:flex;gap:8px;flex-wrap:wrap}
+.ball{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:17px;
+      color:#1a1a1a;box-shadow:inset -6px -8px 12px rgba(0,0,0,.25),inset 4px 6px 10px rgba(255,255,255,.35),0 3px 6px rgba(0,0,0,.35)}
+.ball.g1{background:var(--b1)} .ball.g2{background:var(--b2)} .ball.g3{background:var(--b3)}
+.ball.g4{background:var(--b4)} .ball.g5{background:var(--b5)}
+.tags{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:13px;color:var(--ink2);white-space:nowrap}
+.tags .pop{color:var(--good)} .tags .vrf{color:var(--warn)}
+@media (max-width:560px){.set{grid-template-columns:1fr}.tags{flex-direction:row;align-items:center;gap:12px}.ball{width:40px;height:40px;font-size:16px}}
+
+/* ── 45볼 점수: 45개 막대, 색은 볼 색상 ── */
+.bars{display:grid;grid-template-columns:repeat(45,1fr);gap:2px;height:120px;align-items:end;margin-top:8px}
+.bar{border-radius:3px 3px 0 0;position:relative;min-height:2px}
+.bar span{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:9px;color:var(--ink2)}
+.bars-wrap{padding-bottom:22px;overflow-x:auto}
+.legend{margin-top:14px;font-size:13px;color:var(--ink2)}
+
+/* ── 표 ── */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink2);font-weight:500}
+td.n{font-variant-numeric:tabular-nums}
+.ok{color:var(--good)} .flag{color:var(--warn)}
+
+/* ── 상태/빈 화면 ── */
+.notice{padding:22px;border-radius:14px;background:var(--bg2);color:var(--ink2)}
+.notice code{color:var(--ink);background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.stat div{background:var(--bg2);border-radius:14px;padding:16px}
+.stat .v{font-size:26px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .k{font-size:13px;color:var(--ink2)}
+
+footer{padding:40px 0 0;color:var(--ink2);font-size:14px;max-width:70ch}
+footer strong{color:var(--ink)}
+:focus-visible{outline:2px solid var(--b2);outline-offset:3px}
+@media (prefers-reduced-motion:no-preference){.ball{transition:transform .15s}.set:hover .ball{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>LOTTO ULTIMATE</h1>
+  <p>32종 알고리즘과 6대 방법론을 한 엔진에 모았습니다. 매주 GitHub Actions가 최신 당첨번호로 엔진을 돌리고, 그 결과가 이 페이지에 그대로 실립니다. 예측은 추첨 전에 기록되고 추첨 후 자동으로 채점됩니다.</p>
+  <div class="meta" id="meta"></div>
+</header>
+
+<section id="sets-sec">
+  <h2 id="sets-title">추천 조합</h2>
+  <p class="sub">필터 8종 통과 · 인기 조합 회피 · KMeans 다양성 보장. VRF 표시 세트는 점수와 무관한 검증가능 난수 대조 트랙입니다.</p>
+  <div class="sets" id="sets"></div>
+</section>
+
+<section>
+  <h2>45볼 종합 점수</h2>
+  <p class="sub">8종 통계 + ML 확률 + 네트워크 허브 점수의 가중 평균. 높을수록 이번 회차 가중 샘플링에서 자주 뽑힙니다.</p>
+  <div class="bars-wrap"><div class="bars" id="bars"></div></div>
+  <div class="legend" id="legend"></div>
+</section>
+
+<section>
+  <h2>자기 검증</h2>
+  <p class="sub">이 엔진은 자신이 무작위보다 낫다고 주장하지 않습니다. 검정과 백테스트가 그 주장을 매주 다시 확인합니다.</p>
+  <div class="stat" id="stat"></div>
+  <div id="tests" style="margin-top:24px"></div>
+</section>
+
+<section>
+  <h2>예측 추적 기록</h2>
+  <p class="sub">추첨 전에 등록된 조합만 채점됩니다. 무작위 기대 일치 수는 세트당 0.80개입니다.</p>
+  <div id="tracker"></div>
+</section>
+
+<footer>
+  <p><strong>면책</strong> 로또 6/45의 1등 확률은 1/8,145,060이며 어떤 알고리즘도 이 확률을 바꿀 수 없습니다. 이 도구가 노리는 것은 당첨 시 배당을 나누는 사람을 줄이는 것뿐이며, 그 이득은 당첨이 실현될 때만 존재합니다. 구매는 여유 자금 안에서, 오락으로.</p>
+  <p><strong>도박 문제 상담</strong> 1336 (한국도박문제예방치유원, 24시간) · <a href="https://www.kcgp.or.kr" rel="noopener">kcgp.or.kr</a></p>
+  <p>Oseong Vibe Coding EduHub · K.G.B. · <a href="https://github.com/kkbhong71/lottologic" rel="noopener">소스 코드 (MIT)</a></p>
+</footer>
+</main>
+
+<script>
+/* 동행복권 볼 색상 구간 */
+const grp = n => n<=10?'g1':n<=20?'g2':n<=30?'g3':n<=40?'g4':'g5';
+const ball = n => `<span class="ball ${grp(n)}">${n}</span>`;
+const fmt = (x,d=3) => (x==null||isNaN(x))?'–':Number(x).toFixed(d);
+const kst = iso => { try{ return new Date(iso).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',dateStyle:'medium',timeStyle:'short'}); }catch{ return iso; } };
+const $ = id => document.getElementById(id);
+
+async function load(){
+  let R;
+  try{
+    const r = await fetch('results/latest.json',{cache:'no-store'});
+    if(!r.ok) throw new Error(r.status);
+    R = await r.json();
+  }catch(e){
+    $('sets').innerHTML = `<div class="notice">아직 결과가 없습니다. 저장소의 <code>data/</code>에 <code>new_XXXX.csv</code>를 올리면 Actions가 엔진을 실행하고 <code>results/latest.json</code>을 만듭니다. 로컬에서 열었다면 파일 프로토콜에서는 fetch가 막히므로 GitHub Pages 주소로 확인하세요.</div>`;
+    return;
+  }
+  render(R);
+}
+
+function render(R){
+  const a = R.audit||{}, seed = R.seed||{};
+  $('sets-title').textContent = `제${R.target_round}회 추천 조합`;
+  $('meta').innerHTML = `
+    <span>데이터 <b>${a.first}~${a.last}회</b> (${a.last_date||''})</span>
+    <span>생성 <b>${kst(R.generated_at)}</b></span>
+    ${seed.source?`<span>난수 시드 <b>${seed.source}</b> · 커밋 <b>${seed.commit}</b></span>`:''}
+    <span>균등성 χ² p=<b>${fmt(a.p_uniform)}</b></span>`;
+
+  // 추천 세트
+  $('sets').innerHTML = (R.sets||[]).map((s,i)=>`
+    <div class="set">
+      <div class="no">${s.vrf?'VRF':'#'+(i+1)}</div>
+      <div class="balls">${s.nums.map(ball).join('')}</div>
+      <div class="tags">
+        <span>합 ${s.sum} · 볼점수 ${fmt(s.ball)}</span>
+        ${s.vrf?`<span class="vrf">검증가능 난수 트랙</span>`:`<span class="${s.pop<0?'pop':''}">인기도 ${s.pop>0?'+':''}${fmt(s.pop)}${s.pop<0?' · 비인기 조합':''}</span>`}
+      </div>
+    </div>`).join('');
+
+  // 45볼 막대
+  const sc = R.ball_scores||[]; const mx = Math.max(...sc,1e-9);
+  $('bars').innerHTML = sc.map((v,i)=>`<div class="bar ${grp(i+1)}" style="height:${(v/mx*100).toFixed(1)}%;background:var(--${grp(i+1).replace('g','b')})"><span>${i+1}</span></div>`).join('');
+  const top = sc.map((v,i)=>[v,i+1]).sort((x,y)=>y[0]-x[0]).slice(0,8).map(([v,n])=>`${n}(${fmt(v,2)})`).join(', ');
+  const cons = R.swarm?.consensus_top ? ` · 탐색기 합의 상위: ${R.swarm.consensus_top.join(', ')}` : '';
+  $('legend').textContent = `상위 8: ${top}${cons}`;
+
+  // 자기 검증 카드
+  const bt = R.backtest, tr = R.tracker||{}, tests = R.tests||[];
+  const sig = tests.filter(t=>t.sig_adj).length;
+  $('stat').innerHTML = `
+    <div><div class="v">${sig}/${tests.length||15}</div><div class="k">보정 후 유의한 검정 (0이면 무작위와 동등)</div></div>
+    ${bt?`<div><div class="v">${fmt(bt.model_mean,2)} <small style="font-size:14px;color:var(--ink2)">vs ${fmt(bt.control_mean,2)}</small></div><div class="k">백테스트 ${bt.rounds}회 평균 일치 · 모델 vs 대조군 (p=${fmt(bt.p_value,2)})</div></div>`:''}
+    <div><div class="v">${tr.n??0}</div><div class="k">채점 완료 세트 수${tr.mean_hits!=null?` · 평균 일치 ${fmt(tr.mean_hits,2)}개`:''}</div></div>
+    ${R.ml_prob?`<div><div class="v">${fmt(R.ml_prob.reduce((s,x)=>s+x,0)/45,3)}</div><div class="k">ML 출현확률 평균 (이론 0.133 — 같을수록 과적합 없음)</div></div>`:''}`;
+
+  if(tests.length){
+    $('tests').innerHTML = `<table><thead><tr><th>검정</th><th>원 p</th><th>보정 p</th><th>내용</th></tr></thead><tbody>
+      ${tests.map(t=>`<tr><td>${t.name}</td><td class="n">${fmt(t.p)}</td><td class="n ${t.sig_adj?'flag':'ok'}">${fmt(t.p_adj)}</td><td>${t.desc}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+
+  // 추적 기록
+  if(tr.recent?.length){
+    $('tracker').innerHTML = `<table><thead><tr><th>회차</th><th>등록 조합</th><th>일치</th></tr></thead><tbody>
+      ${tr.recent.slice().reverse().map(r=>`<tr><td class="n">${r.round}</td><td>${r.nums.join(' ')}</td><td class="n ${r.hits>=3?'ok':''}">${r.hits}</td></tr>`).join('')}
+    </tbody></table>`;
+  }else{
+    $('tracker').innerHTML = `<div class="notice">제${R.target_round}회 예측이 등록되어 있습니다. 다음 CSV가 올라오면 자동 채점되어 여기에 표시됩니다.</div>`;
+  }
+}
+load();
+</script>
+</body>
+</html>

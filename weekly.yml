@@ -1,0 +1,56 @@
+# LOTTO ULTIMATE — 주간 자동 실행 워크플로우
+# 동작: data/ 에 새 CSV가 push되면(또는 매주 일요일 0시 KST, 또는 수동 버튼) Python 엔진을 풀 옵션으로 실행하고
+#       results/latest.json · prediction_log.csv 를 커밋 → GitHub Pages(index.html)가 읽어 표시
+name: LOTTO ULTIMATE weekly run
+
+on:
+  push:
+    paths: ["data/**", "engine/**"]          # CSV 또는 엔진 변경 시 자동
+  schedule:
+    - cron: "0 15 * * 6"                      # 토요일 15:00 UTC = 일요일 00:00 KST (추첨 20:45 이후 여유)
+  workflow_dispatch:                          # Actions 탭에서 수동 실행 버튼
+
+permissions:
+  contents: write                             # 결과 커밋 권한
+
+concurrency:
+  group: lotto-run
+  cancel-in-progress: false
+
+jobs:
+  run-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: engine/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r engine/requirements.txt
+
+      - name: Pick latest CSV (가장 큰 회차 번호의 new_XXXX.csv)
+        id: csv
+        run: |
+          LATEST=$(ls data/new_*.csv | sort -V | tail -1)
+          echo "file=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "▶ 사용 파일: $LATEST"
+
+      - name: Run LOTTO ULTIMATE engine (full options)
+        run: |
+          cd engine
+          python lotto_ultimate.py "../${{ steps.csv.outputs.file }}" \
+            --sets 10 --ml --ga --net --swarm --seed auto --vrf 2 --tests --backtest 30 \
+            --out ../results --json
+
+      - name: Commit results
+        run: |
+          git config user.name  "lotto-ultimate-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add results/
+          git diff --cached --quiet && echo "변경 없음" || \
+            (git commit -m "results: auto-run $(date -u +'%Y-%m-%d %H:%M UTC')" && git push)
