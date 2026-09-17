@@ -81,6 +81,13 @@ td.n{font-variant-numeric:tabular-nums}
 .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
 .local-meta{font-size:14px;color:var(--ink2);margin:6px 0 16px}
 .local-meta b{color:var(--ink);font-weight:500}
+.chk{flex-direction:row!important;align-items:center!important;gap:8px!important;padding-bottom:10px}
+.chk input{accent-color:var(--b2);width:16px;height:16px}
+.consensus{margin:14px 0 4px;font-size:14px;color:var(--ink2)}
+.consensus b{color:var(--ink);font-weight:500}
+.track-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:26px 0 12px}
+.track-head h3{margin:0;font-size:16px;font-weight:700}
+.btn.small{padding:7px 12px;font-size:13px}
 footer{padding:40px 0 0;color:var(--ink2);font-size:14px;max-width:70ch}
 footer strong{color:var(--ink)}
 :focus-visible{outline:2px solid var(--b2);outline-offset:3px}
@@ -109,11 +116,23 @@ footer strong{color:var(--ink)}
     <label>세트 수<input type="number" id="opt-sets" value="10" min="1" max="30"></label>
     <label>볼당 상한(0=자동)<input type="number" id="opt-cap" value="0" min="0" max="30"></label>
     <label>인기도 감점 λ<input type="number" id="opt-lam" value="1.0" min="0" max="3" step="0.1"></label>
+    <label class="chk"><input type="checkbox" id="opt-ga" checked> 유전 알고리즘</label>
+    <label class="chk"><input type="checkbox" id="opt-pso" checked> PSO 군집</label>
+    <label>VRF 세트<input type="number" id="opt-vrf" value="2" min="0" max="5"></label>
     <button class="btn" id="run" disabled>번호 생성</button>
     <button class="btn ghost" id="rerun" disabled>같은 데이터로 다시</button>
+    <span id="status" class="local-meta" style="margin:0"></span>
   </div>
   <div class="local-meta" id="local-meta"></div>
+  <div class="consensus" id="consensus"></div>
   <div class="sets" id="local-sets"></div>
+  <div class="track-head">
+    <h3>내 예측 기록 (이 브라우저에만 저장)</h3>
+    <button class="btn small" id="register" disabled>이 세트를 사전등록</button>
+    <button class="btn ghost small" id="export">내보내기</button>
+    <label class="btn ghost small" for="import-file" style="cursor:pointer">가져오기<input type="file" id="import-file" accept=".json" style="display:none"></label>
+  </div>
+  <div id="local-track" class="notice">아직 기록이 없습니다. 세트를 생성한 뒤 "사전등록"을 누르면 회차별로 저장되고, 다음 회차 CSV를 올리면 자동 채점됩니다.</div>
   <div class="bars-wrap" id="local-bars-wrap" style="display:none;margin-top:22px"><div class="bars" id="local-bars"></div></div>
   <div class="legend" id="local-legend"></div>
 </section>
@@ -146,6 +165,7 @@ footer strong{color:var(--ink)}
 </main>
 
 <script src="engine/lotto_engine.js"></script>
+<script src="engine/lotto_engine_opt.js"></script>
 <script>
 /* 동행복권 볼 색상 구간 */
 const grp = n => n<=10?'g1':n<=20?'g2':n<=30?'g3':n<=40?'g4':'g5';
@@ -244,19 +264,52 @@ async function handleFile(f){
     + (issues.length?` · <span class="flag">${issues.length}건 경고: ${issues.slice(0,3).join(', ')}</span>`:' · 무작위와 부합');
   renderBars($('local-bars'), total); $('local-bars-wrap').style.display='';
   localData.topText = '상위 8: ' + total.map((v,i)=>[v,i+1]).sort((a,b)=>b[0]-a[0]).slice(0,8).map(([v,n])=>`${n}(${fmt(v,2)})`).join(', ');
+  const sc = LUX.scorePredictions(rows);
+  if(sc.newly) $('local-meta').innerHTML += ` · <span class="ok">예측 ${sc.newly}세트 자동 채점됨</span>`;
+  renderTrack();
   $('run').disabled = $('rerun').disabled = false;
   runLocal();
 }
-function runLocal(){
+let lastSets = null;
+const setStatus = t => $('status').textContent = t;
+async function runLocal(){
   if(!localData) return;
-  const nSets=+$('opt-sets').value||10, cap=+$('opt-cap').value||null, lam=+$('opt-lam').value;
-  const prev = localData.hist[localData.hist.length-1];
-  const sets = LU.generateSets(localData.scores, prev, {nSets, popPenalty: lam, maxPerBall: cap});
+  const nSets=+$('opt-sets').value||10, cap=+$('opt-cap').value||null, lam=+$('opt-lam').value, nVrf=+$('opt-vrf').value||0;
+  const useGA=$('opt-ga').checked, usePSO=$('opt-pso').checked;
+  const {scores, hist, au} = localData, prev = hist[hist.length-1], nxt = au.last+1;
+  $('run').disabled=$('rerun').disabled=true;
+  const lists={}, extra=[];
+  if(useGA){ setStatus('유전 알고리즘 60세대 진화 중…'); await new Promise(r=>setTimeout(r,20)); const ga=LUX.geneticOptimize(scores,prev,{lam}); lists.GA=ga.cands; extra.push(...ga.cands); }
+  if(usePSO){ setStatus('PSO 입자 군집 수렴 중…'); await new Promise(r=>setTimeout(r,20)); const ps=LUX.psoOptimize(scores,prev,{lam}); lists.PSO=ps.cands; extra.push(...ps.cands); }
+  setStatus('가중 샘플링 · 필터 · KMeans 다양성…'); await new Promise(r=>setTimeout(r,20));
+  const sets = LU.generateSets(scores, prev, {nSets, popPenalty: lam, maxPerBall: cap, extraCands: extra});
+  let seedInfo=null;
+  if(nVrf>0){ setStatus('VRF 검증가능 난수 생성…'); const {seed,source}=await LUX.browserSeed(); const commit=await LUX.vrfCommit(seed,nxt); seedInfo={source,commit,fp:LUX.hex(seed).slice(0,16)};
+    for(const c of await LUX.vrfSets(seed,nxt,nVrf)) sets.push({combo:c, ball:c.reduce((a,n)=>a+scores[n-1],0)/6, pop:LU.popularityIndex(c,prev), vrf:true}); }
+  lastSets = sets;
   renderSets($('local-sets'), sets);
-  const cnt={}; sets.forEach(s=>s.combo.forEach(n=>cnt[n]=(cnt[n]||0)+1));
+  const cnt={}; sets.filter(s=>!s.vrf).forEach(s=>s.combo.forEach(n=>cnt[n]=(cnt[n]||0)+1));
   const capUsed = cap || Math.max(2, Math.ceil(nSets*0.4));
-  $('local-legend').textContent = `${localData.topText}  ·  제${localData.au.last+1}회 ${sets.length}세트 생성, 볼 최다 등장 ${Math.max(...Object.values(cnt))}회 (상한 ${capUsed})`;
+  $('local-legend').textContent = `${localData.topText}  ·  제${nxt}회 ${sets.length}세트 생성, 볼 최다 등장 ${Math.max(...Object.values(cnt))}회 (상한 ${capUsed})`;
+  if(Object.keys(lists).length){ const cs=LUX.consensus(lists); const top=cs.vote.map((v,i)=>[v,i+1]).sort((a,b)=>b[0]-a[0]).slice(0,10).map(p=>p[1]).join(' ');
+    $('consensus').innerHTML = `탐색기 합의 상위 10볼 <b>${top}</b>` + (cs.agreed.length?` · ${cs.agreed.length}개 조합에 ${cs.agreed[0].by.join('+')} 동시 수렴 <b>${cs.agreed[0].combo.join(' ')}</b>`:' · 탐색기 간 동일 조합 없음') + (seedInfo?` · VRF 시드 ${seedInfo.source} 커밋 <b>${seedInfo.commit}</b>`:''); }
+  else $('consensus').innerHTML = seedInfo?`VRF 시드 ${seedInfo.source} 커밋 <b>${seedInfo.commit}</b>`:'';
+  setStatus(''); $('run').disabled=$('rerun').disabled=false; $('register').disabled=false;
 }
+function renderTrack(){
+  const log=LUX.readLog(); const el=$('local-track');
+  if(!log.length){ el.className='notice'; el.textContent='아직 기록이 없습니다. 세트를 생성한 뒤 "사전등록"을 누르면 회차별로 저장되고, 다음 회차 CSV를 올리면 자동 채점됩니다.'; return; }
+  const done=log.filter(e=>e.scored), mean=done.length?(done.reduce((a,e)=>a+e.hits,0)/done.length):null;
+  el.className=''; el.innerHTML = `<div class="local-meta">등록 <b>${log.length}</b>세트 · 채점 <b>${done.length}</b>세트${mean!=null?` · 평균 일치 <b>${mean.toFixed(2)}</b>개 (무작위 기대 0.80) · 3개+ <b>${done.filter(e=>e.hits>=3).length}</b>회`:''}</div>
+    <table><thead><tr><th>회차</th><th>#</th><th>번호</th><th>인기도</th><th>일치</th></tr></thead><tbody>
+    ${log.slice().reverse().slice(0,40).map(e=>`<tr><td class="n">${e.target_round}</td><td class="n">${e.vrf?'VRF':e.set_id}</td><td>${e.nums.join(' ')}</td><td class="n">${e.pop>0?'+':''}${fmt(e.pop)}</td><td class="n ${e.scored&&e.hits>=3?'ok':''}">${e.scored?e.hits:'대기'}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+$('register').addEventListener('click',()=>{ if(!lastSets) return; const nxt=localData.au.last+1;
+  const ok=LUX.registerPredictions(lastSets,nxt,{source:'browser'}); setStatus(ok?`제${nxt}회 ${lastSets.length}세트 사전등록 완료`:`제${nxt}회는 이미 등록되어 있습니다 (회차당 1회)`); renderTrack(); });
+$('export').addEventListener('click',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([LUX.exportLog()],{type:'application/json'})); a.download='lotto_prediction_log.json'; a.click(); });
+$('import-file').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; try{ const n=LUX.importLog(await f.text()); setStatus(`가져오기 완료: 총 ${n}세트`); renderTrack(); }catch{ setStatus('가져오기 실패: JSON 형식을 확인하세요'); } });
+renderTrack();
 $('run').addEventListener('click', runLocal);
 $('rerun').addEventListener('click', runLocal);
 </script>

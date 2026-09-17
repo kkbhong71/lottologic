@@ -15,7 +15,8 @@ index.html                  ← Pages 대시보드 (results/latest.json 표시)
 engine/lotto_ultimate.py    ← 코어: 6중 방어 로더 · 8종 통계 · 인기도 회피 · 8종 필터 · 백테스트 · 예측 추적
 engine/lotto_ultimate_ml.py ← RF+GB · 네트워크 커뮤니티 · 유전 알고리즘 · 15종 검정
 engine/lotto_ultimate_swarm.py ← 진정난수 시드 · VRF · PSO/ACO/점균류 군집지능
-engine/lotto_engine.js      ← 브라우저 JS 엔진 (Python 코어 1:1 이식, index.html "직접 분석"에서 사용)
+engine/lotto_engine.js      ← 브라우저 JS 엔진 코어 (Python 코어 1:1 이식)
+engine/lotto_engine_opt.js  ← 브라우저 최적화: 유전 알고리즘 · PSO · VRF(SHA-256) · 탐색기 합의 · localStorage 예측 기록
 data/new_XXXX.csv           ← 당첨번호 (round, draw date, num1~num6) — 매주 추가
 results/latest.json         ← Actions 자동 생성 결과
 results/prediction_log.csv  ← 사전 등록 → 사후 채점 누적
@@ -55,6 +56,9 @@ python lotto_ultimate.py ../data/new_1241.csv --sets 10 --ml --ga --net --swarm 
 
 ## 브라우저 직접 분석
 페이지의 "내 CSV로 직접 분석"에 CSV를 놓으면 서버 전송 없이 브라우저 안에서 같은 엔진이 실행됩니다.
+- 유전 알고리즘(60세대, 적응형 돌연변이) · PSO(80반복) 후보를 가중 샘플링과 합류시키고, 탐색기 합의(볼 투표·동시 수렴 조합)를 표시
+- VRF 세트: 브라우저 CSPRNG 시드 → SHA-256 해시체인 → 거부샘플링. Python `vrf_numbers`와 바이트 단위 동일(같은 시드 → 같은 번호·커밋). 양자난수 API는 CORS 때문에 브라우저에서 직접 못 부르므로 Actions(Python) 쪽이 담당
+- 예측 기록: "사전등록" 버튼으로 회차당 1회 localStorage에 저장 → 다음 회차 CSV를 올리면 자동 채점. 내보내기/가져오기(JSON)로 브라우저 간 이동 가능
 Python↔JS 교차검증: 45볼 점수 8종 중 6종 비트 일치(Δ=0), recency 8e-17, lift 3e-14(numpy pairwise summation 차이), 인기도 1e-16, 필터 판정 5000/5000 일치.
 
 ## 면책
