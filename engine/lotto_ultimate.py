@@ -257,14 +257,21 @@ def weighted_pick(scores: np.ndarray, k: int = N_PICK, temperature: float = 0.6)
     return tuple(sorted(chosen))
 
 def generate_sets(scores: np.ndarray, prev: np.ndarray, n_sets: int = 10, pool: int = 3000,
-                  pop_penalty: float = 1.0, extra_cands: list | None = None, labels=None) -> list[dict]:
+                  pop_penalty: float = 1.0, extra_cands: list | None = None, labels=None,
+                  max_per_ball: int | None = None) -> list[dict]:
     """
-    1) 후보 pool개 생성 → 2) 필터 통과 → 3) 조합점수 = 평균 볼점수 − pop_penalty×인기도
-    4) KMeans(k=n_sets)로 클러스터별 최고점 1개씩 → 다양성 보장
+    1) 후보 pool개 생성(진정난수 가중 샘플링) + 외부 후보(GA/PSO/…) 합류 → 2) 필터 통과
+    3) 조합점수 = 평균 볼점수 − pop_penalty×인기도 + 0.02×커뮤니티수
+    4) KMeans(k=n_sets)로 후보를 군집화 → 5) 점수순 탐욕 선택, 두 제약을 동시에 적용
+       - 클러스터 다양성: 아직 안 쓴 클러스터의 조합을 우선
+       - 볼당 최대 등장: 한 번호가 max_per_ball 세트를 초과해 등장하지 못함 (리스크 분산)
+       기본 max_per_ball = ceil(n_sets × 0.4) → 10세트면 4회. 이론 균등 기대는 10×6/45 ≈ 1.3회.
     """
     from sklearn.cluster import KMeans
+    if max_per_ball is None:
+        max_per_ball = max(2, math.ceil(n_sets * 0.4))
     cands, seen = [], set()
-    src = [weighted_pick(scores) for _ in range(pool)] + list(extra_cands or [])   # 샘플링 + GA 후보 합류
+    src = [weighted_pick(scores) for _ in range(pool)] + list(extra_cands or [])
     for c in src:
         if c in seen: continue
         ok, why = passes_filters(c)
@@ -272,18 +279,30 @@ def generate_sets(scores: np.ndarray, prev: np.ndarray, n_sets: int = 10, pool: 
         seen.add(c)
         pop = popularity_index(c, prev)
         ball = float(scores[np.array(c) - 1].mean())
-        comm = len({labels[n - 1] for n in c}) if labels is not None else 0     # 커뮤니티 다양성
+        comm = len({labels[n - 1] for n in c}) if labels is not None else 0
         cands.append(dict(combo=c, ball=ball, pop=pop, comm=comm,
                           total=ball - pop_penalty * pop + 0.02 * comm))
-    if len(cands) < n_sets:
-        return sorted(cands, key=lambda d: -d["total"])
+    if not cands:
+        return []
+    k = min(n_sets, len(cands))
     X = np.array([[1 if n in d["combo"] else 0 for n in range(1, 46)] for d in cands], float)
-    labels = KMeans(n_clusters=n_sets, n_init=5, random_state=_sysrand.randrange(10**6)).fit_predict(X)
-    picked = []
-    for lab in range(n_sets):
-        grp = [d for d, l in zip(cands, labels) if l == lab]
-        if grp: picked.append(max(grp, key=lambda d: d["total"]))
-    return sorted(picked, key=lambda d: -d["total"])
+    clus = KMeans(n_clusters=k, n_init=5, random_state=_sysrand.randrange(10**6)).fit_predict(X) if k > 1 else np.zeros(len(cands), int)
+    order = sorted(range(len(cands)), key=lambda i: -cands[i]["total"])
+    return _greedy_select(cands, clus, order, n_sets, max_per_ball)
+
+def _greedy_select(cands, clus, order, n_sets, max_per_ball):
+    """점수순으로 훑으며 (미사용 클러스터 우선) + (볼당 최대 등장) 제약 만족 조합 선택. 2패스: 엄격 → 완화."""
+    picked, used_cl, count = [], set(), np.zeros(46, int)
+    def fits(c): return all(count[n] < max_per_ball for n in c)
+    for strict in (True, False):                  # 1패스: 클러스터 미사용 필수, 2패스: 클러스터 조건 해제
+        for i in order:
+            if len(picked) >= n_sets: break
+            d = cands[i]
+            if d in picked or not fits(d["combo"]): continue
+            if strict and clus[i] in used_cl: continue
+            picked.append(d); used_cl.add(clus[i])
+            for n in d["combo"]: count[n] += 1
+    return picked
 
 
 # =============================================================================
@@ -387,6 +406,7 @@ def main():
     ap.add_argument("--swarm", action="store_true", help="군집지능 PSO+ACO+점균류 후보 합류")
     ap.add_argument("--seed", default="none", help="진정난수 시드: auto|qrng|random_org|usgs|os|none")
     ap.add_argument("--vrf", type=int, default=0, help="VRF 검증가능 조합 n세트 추가")
+    ap.add_argument("--max-per-ball", type=int, default=0, help="볼당 최대 등장 세트 수 (0=자동: ceil(sets×0.4))")
     ap.add_argument("--out", default=".", help="출력 폴더 (prediction_log.csv, latest.json)")
     ap.add_argument("--json", action="store_true", help="results JSON 생성 (GitHub Pages용)")
     a = ap.parse_args()
@@ -471,7 +491,7 @@ def main():
         vrf_c = S.vrf_sets(seed_bytes, nxt_round(df), a.vrf, passes_filters)
 
     sets = generate_sets(scores, hist[-1], n_sets=a.sets, pop_penalty=a.pop_penalty,
-                         extra_cands=ga_c, labels=labels)
+                         extra_cands=ga_c, labels=labels, max_per_ball=a.max_per_ball or None)
     for i, c in enumerate(vrf_c):     # VRF 세트는 점수 무관 — 편향 제거 목적의 별도 트랙
         sets.append(dict(combo=c, ball=float(scores[np.array(c)-1].mean()), pop=popularity_index(c, hist[-1]),
                          comm=0, total=0.0, vrf=True))
@@ -482,6 +502,8 @@ def main():
         cm = f"  커뮤니티={d['comm']}" if d.get("comm") else ("  [VRF 검증가능]" if d.get("vrf") else "")
         print(f"  #{i:2d}  {' '.join(f'{n:2d}' for n in d['combo'])}   합={sum(d['combo']):3d}  "
               f"볼점수={d['ball']:.3f}  인기도={d['pop']:+.3f} {tag}{cm}")
+    cnt = Counter(n for d in sets if not d.get("vrf") for n in d["combo"])
+    print(f"   볼 등장 분포(추천 세트): 최다 {cnt.most_common(4)} · 볼당 상한 {a.max_per_ball or max(2, math.ceil(a.sets*0.4))}회")
     R["target_round"] = nxt
     R["sets"] = [dict(nums=list(d["combo"]), sum=int(sum(d["combo"])), ball=round(d["ball"], 4), pop=round(d["pop"], 4),
                       comm=int(d.get("comm", 0)), vrf=bool(d.get("vrf", False))) for d in sets]
