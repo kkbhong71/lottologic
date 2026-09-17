@@ -69,11 +69,11 @@ td.n{font-variant-numeric:tabular-nums}
 .stat .k{font-size:13px;color:var(--ink2)}
 
 /* ── 직접 분석 ── */
-.drop{border:2px dashed rgba(255,255,255,.22);border-radius:16px;padding:34px 20px;text-align:center;color:var(--ink2);cursor:pointer;transition:border-color .15s,background .15s}
+.drop{display:block;border:2px dashed rgba(255,255,255,.22);border-radius:16px;padding:34px 20px;text-align:center;color:var(--ink2);cursor:pointer;transition:border-color .15s,background .15s;line-height:1.7}
 .drop.over{border-color:var(--b2);background:rgba(105,200,242,.06)}
 .drop b{color:var(--ink)}
 .drop input{display:none}
-.opts{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;margin:18px 0}
+.opts{display:flex;flex-wrap:wrap;gap:16px 22px;align-items:flex-end;margin:24px 0 18px}
 .opts label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
 .opts input[type=number]{width:96px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);font:inherit}
 .btn{padding:11px 20px;border-radius:12px;border:0;background:var(--b2);color:#0B1730;font:700 15px var(--font);cursor:pointer}
@@ -81,7 +81,7 @@ td.n{font-variant-numeric:tabular-nums}
 .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
 .local-meta{font-size:14px;color:var(--ink2);margin:6px 0 16px}
 .local-meta b{color:var(--ink);font-weight:500}
-.chk{flex-direction:row!important;align-items:center!important;gap:8px!important;padding-bottom:10px}
+.chk{flex-direction:row!important;align-items:center!important;gap:8px!important;padding-bottom:11px;color:var(--ink)!important}
 .chk input{accent-color:var(--b2);width:16px;height:16px}
 .consensus{margin:14px 0 4px;font-size:14px;color:var(--ink2)}
 .consensus b{color:var(--ink);font-weight:500}
