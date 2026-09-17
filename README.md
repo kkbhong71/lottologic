@@ -15,6 +15,7 @@ index.html                  ← Pages 대시보드 (results/latest.json 표시)
 engine/lotto_ultimate.py    ← 코어: 6중 방어 로더 · 8종 통계 · 인기도 회피 · 8종 필터 · 백테스트 · 예측 추적
 engine/lotto_ultimate_ml.py ← RF+GB · 네트워크 커뮤니티 · 유전 알고리즘 · 15종 검정
 engine/lotto_ultimate_swarm.py ← 진정난수 시드 · VRF · PSO/ACO/점균류 군집지능
+engine/lotto_engine.js      ← 브라우저 JS 엔진 (Python 코어 1:1 이식, index.html "직접 분석"에서 사용)
 data/new_XXXX.csv           ← 당첨번호 (round, draw date, num1~num6) — 매주 추가
 results/latest.json         ← Actions 자동 생성 결과
 results/prediction_log.csv  ← 사전 등록 → 사후 채점 누적
@@ -50,6 +51,11 @@ python lotto_ultimate.py ../data/new_1241.csv --sets 10 --ml --ga --net --swarm 
 | `--tests` | 15종 무작위성 검정 (Holm-Bonferroni) |
 | `--backtest N` | 최근 N회 walk-forward 백테스트 vs 랜덤 대조군 |
 | `--pop-penalty λ` | 인기도 감점 강도 (기본 1.0) |
+| `--max-per-ball N` | 한 번호가 등장할 수 있는 최대 세트 수 (기본 자동 = ceil(세트수×0.4)) — 리스크 분산 |
+
+## 브라우저 직접 분석
+페이지의 "내 CSV로 직접 분석"에 CSV를 놓으면 서버 전송 없이 브라우저 안에서 같은 엔진이 실행됩니다.
+Python↔JS 교차검증: 45볼 점수 8종 중 6종 비트 일치(Δ=0), recency 8e-17, lift 3e-14(numpy pairwise summation 차이), 인기도 1e-16, 필터 판정 5000/5000 일치.
 
 ## 면책
 본 프로젝트는 통계·알고리즘 연구 및 교육 목적의 오픈소스입니다. 당첨을 보장하지 않으며, 구매 결정과 결과에 대한 책임은 사용자에게 있습니다.

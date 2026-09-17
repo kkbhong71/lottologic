@@ -68,6 +68,19 @@ td.n{font-variant-numeric:tabular-nums}
 .stat .v{font-size:26px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .stat .k{font-size:13px;color:var(--ink2)}
 
+/* ── 직접 분석 ── */
+.drop{border:2px dashed rgba(255,255,255,.22);border-radius:16px;padding:34px 20px;text-align:center;color:var(--ink2);cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--b2);background:rgba(105,200,242,.06)}
+.drop b{color:var(--ink)}
+.drop input{display:none}
+.opts{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;margin:18px 0}
+.opts label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
+.opts input[type=number]{width:96px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);font:inherit}
+.btn{padding:11px 20px;border-radius:12px;border:0;background:var(--b2);color:#0B1730;font:700 15px var(--font);cursor:pointer}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+.local-meta{font-size:14px;color:var(--ink2);margin:6px 0 16px}
+.local-meta b{color:var(--ink);font-weight:500}
 footer{padding:40px 0 0;color:var(--ink2);font-size:14px;max-width:70ch}
 footer strong{color:var(--ink)}
 :focus-visible{outline:2px solid var(--b2);outline-offset:3px}
@@ -86,6 +99,23 @@ footer strong{color:var(--ink)}
   <h2 id="sets-title">추천 조합</h2>
   <p class="sub">필터 8종 통과 · 인기 조합 회피 · KMeans 다양성 보장. VRF 표시 세트는 점수와 무관한 검증가능 난수 대조 트랙입니다.</p>
   <div class="sets" id="sets"></div>
+</section>
+
+<section id="local-sec">
+  <h2>내 CSV로 직접 분석</h2>
+  <p class="sub">브라우저 안에서만 계산됩니다 — 파일은 어디로도 전송되지 않습니다. 위와 같은 엔진(8종 통계 · 인기도 회피 · 8종 필터 · KMeans 다양성 · 볼당 상한)을 crypto 난수로 즉시 실행합니다.</p>
+  <label class="drop" id="drop" for="csvfile"><b>CSV 파일을 여기에 놓거나 클릭해서 선택</b><br>표준(round, draw date, num1~6) · 동행복권 원본(CP949) · 헤더 없는 숫자열 모두 자동 인식<input type="file" id="csvfile" accept=".csv,text/csv"></label>
+  <div class="opts">
+    <label>세트 수<input type="number" id="opt-sets" value="10" min="1" max="30"></label>
+    <label>볼당 상한(0=자동)<input type="number" id="opt-cap" value="0" min="0" max="30"></label>
+    <label>인기도 감점 λ<input type="number" id="opt-lam" value="1.0" min="0" max="3" step="0.1"></label>
+    <button class="btn" id="run" disabled>번호 생성</button>
+    <button class="btn ghost" id="rerun" disabled>같은 데이터로 다시</button>
+  </div>
+  <div class="local-meta" id="local-meta"></div>
+  <div class="sets" id="local-sets"></div>
+  <div class="bars-wrap" id="local-bars-wrap" style="display:none;margin-top:22px"><div class="bars" id="local-bars"></div></div>
+  <div class="legend" id="local-legend"></div>
 </section>
 
 <section>
@@ -115,6 +145,7 @@ footer strong{color:var(--ink)}
 </footer>
 </main>
 
+<script src="engine/lotto_engine.js"></script>
 <script>
 /* 동행복권 볼 색상 구간 */
 const grp = n => n<=10?'g1':n<=20?'g2':n<=30?'g3':n<=40?'g4':'g5';
@@ -188,6 +219,46 @@ function render(R){
   }
 }
 load();
+
+/* ───────── 직접 분석 (브라우저 내 엔진) ───────── */
+const renderSets = (el, sets) => el.innerHTML = sets.map((s,i)=>`
+  <div class="set"><div class="no">#${i+1}</div><div class="balls">${s.combo.map(ball).join('')}</div>
+  <div class="tags"><span>합 ${s.combo.reduce((a,b)=>a+b,0)} · 볼점수 ${fmt(s.ball)}</span>
+  <span class="${s.pop<0?'pop':''}">인기도 ${s.pop>0?'+':''}${fmt(s.pop)}${s.pop<0?' · 비인기 조합':''}</span></div></div>`).join('');
+const renderBars = (el, sc) => { const mx=Math.max(...sc,1e-9); el.innerHTML = sc.map((v,i)=>`<div class="bar" style="height:${(v/mx*100).toFixed(1)}%;background:var(--${grp(i+1).replace('g','b')})"><span>${i+1}</span></div>`).join(''); };
+
+let localData = null;   // {rows, scores}
+const drop=$('drop'), fileIn=$('csvfile');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+fileIn.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+async function handleFile(f){
+  const buf = await f.arrayBuffer();
+  const {rows, issues} = LU.loadCSV(buf);
+  if(rows.length < 50){ $('local-meta').innerHTML=`<span class="flag">유효한 회차가 ${rows.length}개뿐입니다. 형식을 확인하세요.</span>`; return; }
+  const hist = rows.map(r=>r.nums), au = LU.audit(rows), {total} = LU.compositeScores(hist);
+  localData = {rows, hist, scores: total, au};
+  $('local-meta').innerHTML = `<b>${f.name}</b> · 회차 <b>${au.first}~${au.last}</b> (${au.rounds}회) · 번호별 출현 ${au.freqMin}~${au.freqMax}회 · 균등성 χ²=${au.chi2.toFixed(1)}, p=${fmt(au.p)}`
+    + (issues.length?` · <span class="flag">${issues.length}건 경고: ${issues.slice(0,3).join(', ')}</span>`:' · 무작위와 부합');
+  renderBars($('local-bars'), total); $('local-bars-wrap').style.display='';
+  localData.topText = '상위 8: ' + total.map((v,i)=>[v,i+1]).sort((a,b)=>b[0]-a[0]).slice(0,8).map(([v,n])=>`${n}(${fmt(v,2)})`).join(', ');
+  $('run').disabled = $('rerun').disabled = false;
+  runLocal();
+}
+function runLocal(){
+  if(!localData) return;
+  const nSets=+$('opt-sets').value||10, cap=+$('opt-cap').value||null, lam=+$('opt-lam').value;
+  const prev = localData.hist[localData.hist.length-1];
+  const sets = LU.generateSets(localData.scores, prev, {nSets, popPenalty: lam, maxPerBall: cap});
+  renderSets($('local-sets'), sets);
+  const cnt={}; sets.forEach(s=>s.combo.forEach(n=>cnt[n]=(cnt[n]||0)+1));
+  const capUsed = cap || Math.max(2, Math.ceil(nSets*0.4));
+  $('local-legend').textContent = `${localData.topText}  ·  제${localData.au.last+1}회 ${sets.length}세트 생성, 볼 최다 등장 ${Math.max(...Object.values(cnt))}회 (상한 ${capUsed})`;
+}
+$('run').addEventListener('click', runLocal);
+$('rerun').addEventListener('click', runLocal);
 </script>
 </body>
 </html>
