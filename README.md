@@ -16,6 +16,8 @@ engine/lotto_ultimate.py    ← 코어: 6중 방어 로더 · 8종 통계 · 인
 engine/lotto_ultimate_ml.py ← RF+GB · 네트워크 커뮤니티 · 유전 알고리즘 · 15종 검정
 engine/lotto_ultimate_swarm.py ← 진정난수 시드 · VRF · PSO/ACO/점균류 군집지능
 engine/lotto_engine.js      ← 브라우저 JS 엔진 코어 (Python 코어 1:1 이식)
+ALGORITHM_GUIDE.md          ← 41종 알고리즘 해설서 (정적, 수동 갱신)
+BACKTEST_REPORT.md          ← 자체 검증 리포트 (Actions가 매주 자동 갱신)
 engine/lotto_engine_opt.js  ← 브라우저 최적화: 유전 알고리즘 · PSO · VRF(SHA-256) · 탐색기 합의 · localStorage 예측 기록
 data/new_XXXX.csv           ← 당첨번호 (round, draw date, num1~num6) — 매주 추가
 results/latest.json         ← Actions 자동 생성 결과
