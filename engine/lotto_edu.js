@@ -137,7 +137,135 @@ const EDU = (() => {
     return { rawPs, holm: holmDemo(rawPs), sigRaw: rawPs.filter(p => p < 0.05).length };
   }
 
+  /* ── 4교시: 승자의 저주 ── */
+  /** nProg개 "프로그램"이 각각 nRounds회 예측. 실력은 전부 동일(무작위).
+   *  1기에서 가장 잘 맞춘 프로그램을 "승자"로 선택 → 2기 성적을 비교.
+   *  승자의 저주: 1기 성적은 부풀려져 있고, 2기에서는 평균으로 회귀. */
+  function winnersCurse(nProg = 7, nRounds = 50, trials = 500) {
+    const theory = N_PICK * N_PICK / N_BALL;  // 0.8
+    let sumWin1 = 0, sumWin2 = 0, sumAvg1 = 0, sumAvg2 = 0;
+    for (let t = 0; t < trials; t++) {
+      const phase1 = [], phase2 = [];
+      for (let p = 0; p < nProg; p++) {
+        let s1 = 0, s2 = 0;
+        for (let r = 0; r < nRounds; r++) {
+          const pred = new Set(); while (pred.size < N_PICK) pred.add(randrange(N_BALL) + 1);
+          const actual = new Set(); while (actual.size < N_PICK) actual.add(randrange(N_BALL) + 1);
+          s1 += [...pred].filter(n => actual.has(n)).length;
+        }
+        for (let r = 0; r < nRounds; r++) {
+          const pred = new Set(); while (pred.size < N_PICK) pred.add(randrange(N_BALL) + 1);
+          const actual = new Set(); while (actual.size < N_PICK) actual.add(randrange(N_BALL) + 1);
+          s2 += [...pred].filter(n => actual.has(n)).length;
+        }
+        phase1.push(s1 / nRounds); phase2.push(s2 / nRounds);
+      }
+      const winIdx = phase1.indexOf(Math.max(...phase1));
+      sumWin1 += phase1[winIdx]; sumWin2 += phase2[winIdx];
+      sumAvg1 += phase1.reduce((a, b) => a + b, 0) / nProg;
+      sumAvg2 += phase2.reduce((a, b) => a + b, 0) / nProg;
+    }
+    return {
+      nProg, nRounds, trials, theory,
+      winner_phase1: +(sumWin1 / trials).toFixed(3),
+      winner_phase2: +(sumWin2 / trials).toFixed(3),
+      average_phase1: +(sumAvg1 / trials).toFixed(3),
+      average_phase2: +(sumAvg2 / trials).toFixed(3),
+      regression: +((sumWin1 - sumWin2) / trials).toFixed(3),
+    };
+  }
+
+  /* ── 5교시: 외삽의 위험 ── */
+  /** 과거 nTrain회로 빈도 점수 상위 k개를 뽑고, 이후 nTest회에서 일치율 측정.
+   *  비교 대상: 무작위 k개. 과거 패턴이 미래에 이어지지 않음을 보여줌. */
+  function extrapolationRisk(nTrain = 200, nTest = 100, k = 12, trials = 300) {
+    let sumModel = 0, sumRandom = 0;
+    for (let t = 0; t < trials; t++) {
+      // 훈련: nTrain회 추첨 시뮬레이션
+      const freq = new Array(N_BALL).fill(0);
+      for (let r = 0; r < nTrain; r++) {
+        const d = new Set(); while (d.size < N_PICK) d.add(randrange(N_BALL)); for (const b of d) freq[b]++;
+      }
+      const topK = freq.map((f, i) => [f, i]).sort((a, b) => b[0] - a[0]).slice(0, k).map(p => p[1]);
+      const randK = []; const used = new Set();
+      while (randK.length < k) { const r = randrange(N_BALL); if (!used.has(r)) { used.add(r); randK.push(r); } }
+      // 테스트: nTest회에서 각 조합의 번호가 나온 비율
+      let mHit = 0, rHit = 0;
+      for (let r = 0; r < nTest; r++) {
+        const d = new Set(); while (d.size < N_PICK) d.add(randrange(N_BALL));
+        for (const b of topK) if (d.has(b)) mHit++;
+        for (const b of randK) if (d.has(b)) rHit++;
+      }
+      sumModel += mHit / (nTest * k); sumRandom += rHit / (nTest * k);
+    }
+    return {
+      nTrain, nTest, k, trials,
+      theoryRate: +(N_PICK / N_BALL).toFixed(4),
+      modelRate: +(sumModel / trials).toFixed(4),
+      randomRate: +(sumRandom / trials).toFixed(4),
+      difference: +((sumModel - sumRandom) / trials).toFixed(4),
+    };
+  }
+
+  /* ── 6교시: 몬테카를로 생애 시뮬레이터 ── */
+  /** years년간 매주 spend원씩 구매 시뮬레이션.
+   *  당첨 확률: 5등(3개) 1/45×..., 4등(4개), 3등(5개), 2등(5+보너스), 1등(6개)
+   *  반환: 총 지출, 총 당첨금, 순이익, 등수별 당첨 횟수 */
+  function lifetimeSim(years = 30, weeklySpend = 10000, gamesPerWeek = 10) {
+    const weeks = years * 52;
+    const totalSpent = weeks * weeklySpend;
+    let totalWon = 0;
+    const wins = { '5등(3개)': 0, '4등(4개)': 0, '3등(5개)': 0, '2등(5+보너스)': 0, '1등(6개)': 0 };
+    const prizes = { 3: 5000, 4: 50000, 5: 1500000, '5b': 30000000, 6: 2000000000 };
+
+    for (let w = 0; w < weeks; w++) {
+      // 매주 실제 추첨: 6개 + 보너스 1개
+      const drum = []; for (let i = 1; i <= 45; i++) drum.push(i);
+      for (let i = 44; i > 0; i--) { const j = randrange(i + 1); [drum[i], drum[j]] = [drum[j], drum[i]]; }
+      const actual = new Set(drum.slice(0, 6));
+      const bonus = drum[6];
+
+      for (let g = 0; g < gamesPerWeek; g++) {
+        const pick = new Set(); while (pick.size < 6) pick.add(randrange(45) + 1);
+        const match = [...pick].filter(n => actual.has(n)).length;
+        if (match === 6) { wins['1등(6개)']++; totalWon += prizes[6]; }
+        else if (match === 5 && pick.has(bonus)) { wins['2등(5+보너스)']++; totalWon += prizes['5b']; }
+        else if (match === 5) { wins['3등(5개)']++; totalWon += prizes[5]; }
+        else if (match === 4) { wins['4등(4개)']++; totalWon += prizes[4]; }
+        else if (match === 3) { wins['5등(3개)']++; totalWon += prizes[3]; }
+      }
+    }
+    return {
+      years, weeklySpend, gamesPerWeek, weeks,
+      totalSpent, totalWon,
+      netProfit: totalWon - totalSpent,
+      returnRate: +((totalWon / totalSpent) * 100).toFixed(1),
+      wins,
+    };
+  }
+
+  /** 여러 번 생애 시뮬레이션 → 분포 요약 */
+  function lifetimeDistribution(years = 30, weeklySpend = 10000, sims = 100) {
+    const results = [];
+    for (let i = 0; i < sims; i++) results.push(lifetimeSim(years, weeklySpend));
+    const nets = results.map(r => r.netProfit).sort((a, b) => a - b);
+    const returns = results.map(r => r.returnRate);
+    const anyBig = results.filter(r => r.wins['1등(6개)'] > 0 || r.wins['2등(5+보너스)'] > 0).length;
+    return {
+      sims, years, weeklySpend,
+      totalSpent: results[0].totalSpent,
+      medianNet: nets[Math.floor(sims / 2)],
+      worstNet: nets[0],
+      bestNet: nets[nets.length - 1],
+      meanReturn: +(returns.reduce((a, b) => a + b, 0) / sims).toFixed(1),
+      medianReturn: +returns.sort((a, b) => a - b)[Math.floor(sims / 2)].toFixed(1),
+      bigWinners: anyBig,
+      p1st: +(1 - (1 - 1 / 8145060) ** (years * 52 * 10)).toFixed(6),
+    };
+  }
+
   return { diagnosePopularity, popPercentile, lawOfLargeNumbers, convergenceDemo,
-           multipleComparisonSim, holmDemo, fakeTestBattery };
+           multipleComparisonSim, holmDemo, fakeTestBattery,
+           winnersCurse, extrapolationRisk, lifetimeSim, lifetimeDistribution };
 })();
 if (typeof module !== 'undefined') module.exports = EDU;
