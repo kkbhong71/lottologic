@@ -224,6 +224,32 @@ footer strong{color:var(--ink)}
       <div id="lesson3-result"></div>
     </div>
 
+    <div class="lesson" id="lesson4">
+      <h3><span class="num">4</span> 승자의 저주</h3>
+      <p class="desc">7개 프로그램이 각각 50회 예측합니다. 전부 무작위(실력 동일)인데도, 1기에서 "가장 잘 맞춘 프로그램"을 골라 2기에서 다시 보면 성적이 평균으로 돌아갑니다. Dashboard v3.4의 17.08% 일치율이 다중비교 보정 후 유의하지 않았던 이유가 이것입니다.</p>
+      <button class="btn small" id="btn-lesson4" onclick="runLesson4()">시뮬레이션 (7개 프로그램 × 200회)</button>
+      <div id="lesson4-result"></div>
+    </div>
+
+    <div class="lesson" id="lesson5">
+      <h3><span class="num">5</span> 외삽의 위험</h3>
+      <p class="desc">과거 200회 추첨에서 가장 많이 나온 상위 12개 번호를 골라, 이후 100회에서 얼마나 잘 맞는지 봅니다. 무작위 12개와 비교하면 차이가 없습니다. 독립 추첨에서는 과거 빈도가 미래를 예측하지 못합니다.</p>
+      <button class="btn small" id="btn-lesson5" onclick="runLesson5()">시뮬레이션 (300회 반복)</button>
+      <div id="lesson5-result"></div>
+    </div>
+
+    <div class="lesson" id="lesson6">
+      <h3><span class="num">6</span> 몬테카를로 생애 시뮬레이터</h3>
+      <p class="desc">매주 1만원씩 30년간 로또를 사면 어떻게 될까요? 총 지출 1,560만원. 실제 추첨을 시뮬레이션해 당첨금 총액, 등수별 횟수, 순이익을 계산합니다. "나 한 명의 인생"과 "30명의 평행 세계"를 비교하세요.</p>
+      <div class="edu-input">
+        <label style="color:var(--ink2)">기간<input type="number" id="edu-years" value="30" min="1" max="50" style="width:60px;margin-left:6px"> 년</label>
+        <label style="color:var(--ink2)">주당<input type="number" id="edu-weekly" value="10000" min="1000" max="100000" step="1000" style="width:80px;margin-left:6px"> 원</label>
+        <button class="btn small" id="btn-lesson6a" onclick="runLesson6a()">내 인생 1회</button>
+        <button class="btn ghost small" id="btn-lesson6b" onclick="runLesson6b()">평행 세계 30명</button>
+      </div>
+      <div id="lesson6-result"></div>
+    </div>
+
   </div>
 </section>
 
@@ -427,6 +453,84 @@ function runLesson3sim(){
     <div style="margin:4px 0">5000번 실험에서, 15개 검정 중 <b>하나라도 p&lt;0.05</b>가 나온 비율</div>
     <div style="color:var(--ink2)">이론값: ${r.theoryRate}% = 1−(1−0.05)<sup>15</sup></div>
     <div style="margin-top:8px;font-size:13px;color:var(--ink2)">모든 검정이 순수 우연인데도 절반 이상이 "유의"합니다. 이것이 <b>다중비교 함정</b>이고, LOTTO ULTIMATE이 Holm-Bonferroni 보정을 거는 이유입니다.</div>
+  </div>`;
+}
+
+/* 4교시: 승자의 저주 */
+async function runLesson4(){
+  $('btn-lesson4').disabled=true; $('lesson4-result').innerHTML='<div class="edu-result" style="color:var(--ink2)">7개 프로그램 시뮬레이션 중… (2~4초)</div>';
+  await new Promise(r=>setTimeout(r,50));
+  const wc=EDU.winnersCurse(7,50,200);
+  $('btn-lesson4').disabled=false;
+  $('lesson4-result').innerHTML=`<div class="edu-result">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
+      <div><div class="big" style="color:var(--warn)">${wc.winner_phase1}</div><div style="font-size:13px;color:var(--ink2)">승자의 1기 평균 일치</div></div>
+      <div><div class="big">${wc.winner_phase2}</div><div style="font-size:13px;color:var(--ink2)">승자의 2기 평균 일치</div></div>
+    </div>
+    <div style="margin:8px 0">이론 기대값: <b>${wc.theory.toFixed(3)}</b> · 평균 회귀량: <b>${wc.regression}</b></div>
+    <div style="font-size:13px;color:var(--ink2)">7개 프로그램이 전부 무작위(실력 동일)인데도, 1기에서 "가장 잘 맞춘" 프로그램의 성적(${wc.winner_phase1})은 이론값(${wc.theory.toFixed(3)})보다 높게 보입니다.
+    그러나 2기에서는 <b>${wc.winner_phase2}</b>로 이론값에 돌아갑니다. 이 차이(${wc.regression})가 <b>승자의 저주</b>입니다.</div>
+    <div style="margin-top:8px;font-size:13px;color:var(--ink2)">교훈: "여러 프로그램 중 가장 좋은 것을 골랐다"는 말은 "가장 운이 좋았던 것을 골랐다"와 같습니다. 이것이 LOTTO ULTIMATE이 다중비교 보정 없이는 어떤 알고리즘의 우위도 인정하지 않는 이유입니다.</div>
+  </div>`;
+}
+
+/* 5교시: 외삽의 위험 */
+async function runLesson5(){
+  $('btn-lesson5').disabled=true; $('lesson5-result').innerHTML='<div class="edu-result" style="color:var(--ink2)">과거 빈도 상위 vs 무작위 비교 중… (1~2초)</div>';
+  await new Promise(r=>setTimeout(r,50));
+  const ex=EDU.extrapolationRisk(200,100,12,300);
+  $('btn-lesson5').disabled=false;
+  $('lesson5-result').innerHTML=`<div class="edu-result">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:12px">
+      <div><div class="big">${(ex.modelRate*100).toFixed(2)}%</div><div style="font-size:13px;color:var(--ink2)">빈도 상위 12개<br>미래 출현율</div></div>
+      <div><div class="big">${(ex.randomRate*100).toFixed(2)}%</div><div style="font-size:13px;color:var(--ink2)">무작위 12개<br>미래 출현율</div></div>
+      <div><div class="big">${(ex.theoryRate*100).toFixed(2)}%</div><div style="font-size:13px;color:var(--ink2)">이론값<br>(6/45)</div></div>
+    </div>
+    <div style="margin:8px 0">차이: <b>${(ex.difference*100).toFixed(2)}%p</b> — ${Math.abs(ex.difference)<0.005?'<span class="ok">사실상 0</span>':'미미한 수준'}</div>
+    <div style="font-size:13px;color:var(--ink2)">과거 200회에서 가장 많이 나온 12개를 골라 미래 100회에 적용하면, 무작위 12개와 <b>차이가 없습니다</b>.
+    각 추첨이 독립이라 과거 빈도가 미래를 예측하지 못하기 때문입니다. 이것이 "핫 번호 전략"이 작동하지 않는 이유이며,
+    LOTTO ULTIMATE이 빈도 점수를 "예측"이 아니라 "인기도 회피를 위한 도구"로만 쓰는 이유입니다.</div>
+  </div>`;
+}
+
+/* 6교시: 몬테카를로 생애 시뮬레이터 */
+async function runLesson6a(){
+  const years=+$('edu-years').value||30, weekly=+$('edu-weekly').value||10000;
+  $('btn-lesson6a').disabled=true; $('lesson6-result').innerHTML=`<div class="edu-result" style="color:var(--ink2)">${years}년간 매주 ${weekly.toLocaleString()}원… 시뮬레이션 중</div>`;
+  await new Promise(r=>setTimeout(r,50));
+  const ls=EDU.lifetimeSim(years,weekly);
+  $('btn-lesson6a').disabled=false;
+  const net=ls.netProfit; const color=net>=0?'var(--good)':'var(--b3)';
+  $('lesson6-result').innerHTML=`<div class="edu-result">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:12px">
+      <div><div class="big" style="color:var(--b3)">${(ls.totalSpent/10000).toLocaleString()}만</div><div style="font-size:13px;color:var(--ink2)">총 지출</div></div>
+      <div><div class="big">${(ls.totalWon/10000).toLocaleString()}만</div><div style="font-size:13px;color:var(--ink2)">총 당첨금</div></div>
+      <div><div class="big" style="color:${color}">${net>=0?'+':''}${(net/10000).toLocaleString()}만</div><div style="font-size:13px;color:var(--ink2)">순이익</div></div>
+    </div>
+    <div style="margin:8px 0">수익률: <b>${ls.returnRate}%</b> (100% 미만이면 손실)</div>
+    <table style="margin-top:10px"><thead><tr><th>등수</th><th>횟수</th><th>당첨금</th></tr></thead><tbody>
+    ${Object.entries(ls.wins).map(([k,v])=>`<tr><td>${k}</td><td class="n">${v.toLocaleString()}</td><td class="n">${k.includes('1등')?'20억':k.includes('2등')?'3천만':k.includes('3등')?'150만':k.includes('4등')?'5만':'5천'}원</td></tr>`).join('')}
+    </tbody></table>
+    <div style="margin-top:10px;font-size:13px;color:var(--ink2)">${ls.wins['1등(6개)']>0?'🎉 이 인생에서는 1등에 당첨되었습니다! 그러나…':'이 인생에서는 1등이 없었습니다.'} ${years}년×52주×10게임 = ${(years*52*10).toLocaleString()}게임 중 1등 기대값은 ${(years*52*10/8145060).toFixed(4)}회입니다. 버튼을 여러 번 눌러 "평행 세계"를 체험해 보세요.</div>
+  </div>`;
+}
+async function runLesson6b(){
+  const years=+$('edu-years').value||30, weekly=+$('edu-weekly').value||10000;
+  $('btn-lesson6b').disabled=true; $('lesson6-result').innerHTML=`<div class="edu-result" style="color:var(--ink2)">30명의 평행 세계 시뮬레이션 중… (5~10초)</div>`;
+  await new Promise(r=>setTimeout(r,50));
+  const ld=EDU.lifetimeDistribution(years,weekly,30);
+  $('btn-lesson6b').disabled=false;
+  $('lesson6-result').innerHTML=`<div class="edu-result">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:12px">
+      <div><div class="big" style="color:var(--b3)">${(ld.totalSpent/10000).toLocaleString()}만</div><div style="font-size:13px;color:var(--ink2)">총 지출<br>(${years}년)</div></div>
+      <div><div class="big">${ld.medianReturn}%</div><div style="font-size:13px;color:var(--ink2)">중앙값<br>수익률</div></div>
+      <div><div class="big" style="color:${ld.medianNet>=0?'var(--good)':'var(--b3)'}">${ld.medianNet>=0?'+':''}${(ld.medianNet/10000).toFixed(0)}만</div><div style="font-size:13px;color:var(--ink2)">중앙값<br>순이익</div></div>
+      <div><div class="big">${ld.bigWinners}/30</div><div style="font-size:13px;color:var(--ink2)">1·2등<br>경험자</div></div>
+    </div>
+    <div style="margin:8px 0">1등 당첨 확률(${years}년, 주 10게임): <b>${(ld.p1st*100).toFixed(3)}%</b></div>
+    <div style="font-size:13px;color:var(--ink2)">30명이 동일한 조건으로 ${years}년간 구매한 결과입니다. <b>중앙값</b>은 "절반의 사람이 이보다 나쁜 결과"를 뜻합니다.
+    대부분은 지출의 15~40%만 회수하고, 극소수가 대박을 맞아 평균을 끌어올립니다. 이것이 "기대값은 있지만 중앙값은 손실"인 로또의 본질입니다.
+    <br><br>LOTTO ULTIMATE의 인기도 회피는 이 구조를 바꾸지 못합니다. 바꾸는 것은 "당첨됐을 때 얼마를 받느냐"뿐입니다.</div>
   </div>`;
 }
 $('run').addEventListener('click', runLocal);
