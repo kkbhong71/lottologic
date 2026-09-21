@@ -88,6 +88,31 @@ td.n{font-variant-numeric:tabular-nums}
 .track-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:26px 0 12px}
 .track-head h3{margin:0;font-size:16px;font-weight:700}
 .btn.small{padding:7px 12px;font-size:13px}
+/* ── 교육 모듈 ── */
+.edu-toggle{display:inline-flex;align-items:center;gap:10px;padding:12px 18px;border-radius:14px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);cursor:pointer;font:700 15px var(--font);transition:background .15s}
+.edu-toggle:hover{background:rgba(105,200,242,.08)}
+.edu-toggle .arrow{transition:transform .2s;font-size:12px}
+.edu-toggle.open .arrow{transform:rotate(90deg)}
+.edu-wrap{display:none;margin-top:20px}
+.edu-wrap.show{display:block}
+.lesson{background:var(--bg2);border-radius:16px;padding:24px;margin-bottom:16px}
+.lesson h3{margin:0 0 6px;font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.lesson h3 .num{background:var(--b2);color:#0B1730;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:900;flex-shrink:0}
+.lesson p.desc{color:var(--ink2);margin:0 0 16px;font-size:14px;line-height:1.6}
+.edu-input{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.edu-input input[type=number]{width:52px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;text-align:center}
+.edu-result{padding:16px;border-radius:12px;background:rgba(255,255,255,.04);margin-top:12px}
+.edu-result .big{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
+.factor{padding:6px 10px;border-radius:8px;margin:4px 0;font-size:13px}
+.factor.good{background:rgba(127,224,168,.1);color:var(--good)}
+.factor.bad{background:rgba(255,114,114,.1);color:var(--b3)}
+.slider-row{display:flex;align-items:center;gap:12px;margin:10px 0}
+.slider-row input[type=range]{flex:1;accent-color:var(--b2)}
+.slider-row .val{min-width:70px;text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+.mini-bar{display:flex;align-items:end;gap:1px;height:60px;margin:10px 0}
+.mini-bar div{flex:1;border-radius:2px 2px 0 0;min-width:2px;transition:height .3s}
+.mc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:3px;margin:10px 0}
+.mc-cell{aspect-ratio:1;border-radius:4px;display:grid;place-items:center;font-size:10px;font-weight:700}
 footer{padding:40px 0 0;color:var(--ink2);font-size:14px;max-width:70ch}
 footer strong{color:var(--ink)}
 :focus-visible{outline:2px solid var(--b2);outline-offset:3px}
@@ -157,6 +182,51 @@ footer strong{color:var(--ink)}
   <div id="tracker"></div>
 </section>
 
+<section id="edu-section">
+  <button class="edu-toggle" id="edu-toggle" onclick="this.classList.toggle('open');document.getElementById('edu-wrap').classList.toggle('show')">
+    <span class="arrow">▶</span> 통계 교실 — 왜 이 시스템은 이렇게 만들어졌는가
+  </button>
+  <div class="edu-wrap" id="edu-wrap">
+
+    <div class="lesson" id="lesson1">
+      <h3><span class="num">1</span> 인기도 자가진단</h3>
+      <p class="desc">내가 고른 번호가 대중과 얼마나 겹치는지 즉시 측정합니다. 인기도가 높으면 1등에 당첨돼도 많은 사람과 나눠야 합니다. 이 시스템이 "비인기 조합"을 추구하는 이유를 체감하세요.</p>
+      <div class="edu-input">
+        <span style="color:var(--ink2)">내 번호 6개:</span>
+        <input type="number" id="edu-n1" min="1" max="45" placeholder="1">
+        <input type="number" id="edu-n2" min="1" max="45" placeholder="2">
+        <input type="number" id="edu-n3" min="1" max="45" placeholder="3">
+        <input type="number" id="edu-n4" min="1" max="45" placeholder="4">
+        <input type="number" id="edu-n5" min="1" max="45" placeholder="5">
+        <input type="number" id="edu-n6" min="1" max="45" placeholder="6">
+        <button class="btn small" onclick="runLesson1()">진단</button>
+      </div>
+      <div id="lesson1-result"></div>
+    </div>
+
+    <div class="lesson" id="lesson2">
+      <h3><span class="num">2</span> 대수의 법칙</h3>
+      <p class="desc">로또를 충분히 많이 추첨하면 모든 번호의 출현 비율은 정확히 1/45(≈2.22%)에 수렴합니다. 슬라이더를 움직여 시행 횟수가 늘어날수록 막대가 고르게 되는 걸 확인하세요. "핫 번호"와 "콜드 번호"는 시행 횟수가 적을 때의 착시입니다.</p>
+      <div class="slider-row">
+        <span style="color:var(--ink2)">추첨 횟수:</span>
+        <input type="range" id="edu-lln-slider" min="1" max="4" step="1" value="1">
+        <span class="val" id="edu-lln-val">10회</span>
+      </div>
+      <div class="mini-bar" id="edu-lln-bars"></div>
+      <div id="edu-lln-stat" class="local-meta"></div>
+    </div>
+
+    <div class="lesson" id="lesson3">
+      <h3><span class="num">3</span> 다중비교 함정</h3>
+      <p class="desc">15개 검정을 동시에 돌리면, 모든 것이 순수 우연이어도 <b>약 54%</b> 확률로 하나 이상이 "유의하다(p&lt;0.05)"고 나옵니다. 이것이 "이 알고리즘이 효과가 있다!"고 착각하게 만드는 함정이고, Holm-Bonferroni 보정이 필요한 이유입니다. 버튼을 눌러 직접 체험하세요.</p>
+      <button class="btn small" onclick="runLesson3()">무작위 15개 검정 실행</button>
+      <button class="btn ghost small" onclick="runLesson3sim()">5000회 시뮬레이션</button>
+      <div id="lesson3-result"></div>
+    </div>
+
+  </div>
+</section>
+
 <footer>
   <p><strong>면책</strong> 로또 6/45의 1등 확률은 1/8,145,060이며 어떤 알고리즘도 이 확률을 바꿀 수 없습니다. 이 도구가 노리는 것은 당첨 시 배당을 나누는 사람을 줄이는 것뿐이며, 그 이득은 당첨이 실현될 때만 존재합니다. 구매는 여유 자금 안에서, 오락으로.</p>
   <p><strong>도박 문제 상담</strong> 1336 (한국도박문제예방치유원, 24시간) · <a href="https://www.kcgp.or.kr" rel="noopener">kcgp.or.kr</a></p>
@@ -166,6 +236,7 @@ footer strong{color:var(--ink)}
 
 <script src="engine/lotto_engine.js"></script>
 <script src="engine/lotto_engine_opt.js"></script>
+<script src="engine/lotto_edu.js"></script>
 <script>
 /* 동행복권 볼 색상 구간 */
 const grp = n => n<=10?'g1':n<=20?'g2':n<=30?'g3':n<=40?'g4':'g5';
@@ -310,6 +381,54 @@ $('register').addEventListener('click',()=>{ if(!lastSets) return; const nxt=loc
 $('export').addEventListener('click',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([LUX.exportLog()],{type:'application/json'})); a.download='lotto_prediction_log.json'; a.click(); });
 $('import-file').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; try{ const n=LUX.importLog(await f.text()); setStatus(`가져오기 완료: 총 ${n}세트`); renderTrack(); }catch{ setStatus('가져오기 실패: JSON 형식을 확인하세요'); } });
 renderTrack();
+
+/* ───────── 교육 모듈 인터랙션 ───────── */
+function runLesson1(){
+  const nums=[]; for(let i=1;i<=6;i++){const v=+$('edu-n'+i).value; if(v>=1&&v<=45) nums.push(v);}
+  if(new Set(nums).size!==6){$('lesson1-result').innerHTML='<div class="edu-result">1~45 사이 서로 다른 번호 6개를 입력하세요.</div>';return;}
+  const prev = localData?.hist?.at(-1) || [7,13,16,23,24,43];
+  const d=EDU.diagnosePopularity(nums,prev);
+  const pp=EDU.popPercentile(d.pop,prev,500);
+  $('lesson1-result').innerHTML=`<div class="edu-result">
+    <div class="big" style="color:${d.grade.color}">${d.grade.emoji} ${d.grade.label} (인기도 ${d.pop>0?'+':''}${d.pop})</div>
+    <div style="margin:8px 0;color:var(--ink2)">무작위 500조합 중 상위 <b>${pp.percentile}%</b> — ${pp.percentile>70?'대중과 많이 겹치는 조합입니다. 당첨 시 배당이 줄어듭니다.':pp.percentile<30?'대중이 잘 고르지 않는 조합입니다. 당첨 시 배당에 유리합니다.':'평균적인 인기도입니다.'}</div>
+    ${d.factors.map(f=>`<div class="factor ${f.impact}">${f.impact==='bad'?'⚠':'✓'} ${f.text}</div>`).join('')}
+    <div style="margin-top:10px;font-size:13px;color:var(--ink2)">합계 ${d.detail.sum} · 생일범위 ${d.detail.birthday}개 · 행운수 ${d.detail.lucky}개 · 끝수반복 ${d.detail.tailRepeat}쌍 · 직전겹침 ${d.detail.prevOverlap}개 · 같은행 최대 ${d.detail.maxRow}개</div>
+  </div>`;
+}
+const llnSteps=[10,100,1000,10000];
+const llnSlider=$('edu-lln-slider'); if(llnSlider) llnSlider.oninput=function(){runLesson2(llnSteps[+this.value-1]);};
+function runLesson2(n){
+  n=n||10; $('edu-lln-val').textContent=n.toLocaleString()+'회';
+  const r=EDU.lawOfLargeNumbers(n); const mx=Math.max(...r.rates);
+  const clr=i=>i<10?'--b1':i<20?'--b2':i<30?'--b3':i<40?'--b4':'--b5';
+  $('edu-lln-bars').innerHTML=r.rates.map((v,i)=>`<div style="height:${(v/mx*100).toFixed(1)}%;background:var(${clr(i)})" title="${i+1}: ${(v*100).toFixed(2)}%"></div>`).join('');
+  $('edu-lln-stat').innerHTML=`이론 출현율 <b>${(r.theoryRate*100).toFixed(2)}%</b> · 최대 편차 <b>${(r.maxDev*100).toFixed(2)}%p</b>${r.maxDev<0.01?' · <span class="ok">수렴 완료</span>':r.maxDev<0.03?' · 수렴 중':''}`;
+}
+runLesson2(10);
+function runLesson3(){
+  const r=EDU.fakeTestBattery(15);
+  const cells=r.holm.map((h,i)=>{
+    const bg=h.sigRaw?'rgba(255,114,114,.25)':'rgba(255,255,255,.06)';
+    const border=h.sigAdj?'2px solid var(--b3)':'2px solid transparent';
+    return `<div class="mc-cell" style="background:${bg};border:${border}" title="검정${i+1}: p=${h.raw}">${h.raw<0.05?'★':h.raw.toFixed(2)}</div>`;
+  }).join('');
+  $('lesson3-result').innerHTML=`<div class="edu-result">
+    <div class="mc-grid">${cells}</div>
+    <div style="margin-top:8px">원 p&lt;0.05: <b>${r.sigRaw}/15</b>${r.sigRaw>0?' — "유의한 결과 발견!" …정말?':' — 이번엔 하나도 안 걸림'}</div>
+    <div>Holm-Bonferroni 보정 후: <b>${r.holm.filter(h=>h.sigAdj).length}/15</b> — ${r.holm.some(h=>h.sigAdj)?'보정 후에도 유의 → 진짜 신호일 수 있음':'보정하면 전부 사라짐 → <span class="ok">순수 우연이었음</span>'}</div>
+    <div style="margin-top:6px;font-size:13px;color:var(--ink2)">★ = p&lt;0.05 · 빨간 테두리 = 보정 후에도 유의. 버튼을 여러 번 눌러보세요 — 약 절반은 ★이 나옵니다.</div>
+  </div>`;
+}
+function runLesson3sim(){
+  const r=EDU.multipleComparisonSim(15,0.05,5000);
+  $('lesson3-result').innerHTML=`<div class="edu-result">
+    <div class="big">${r.falseRate}%</div>
+    <div style="margin:4px 0">5000번 실험에서, 15개 검정 중 <b>하나라도 p&lt;0.05</b>가 나온 비율</div>
+    <div style="color:var(--ink2)">이론값: ${r.theoryRate}% = 1−(1−0.05)<sup>15</sup></div>
+    <div style="margin-top:8px;font-size:13px;color:var(--ink2)">모든 검정이 순수 우연인데도 절반 이상이 "유의"합니다. 이것이 <b>다중비교 함정</b>이고, LOTTO ULTIMATE이 Holm-Bonferroni 보정을 거는 이유입니다.</div>
+  </div>`;
+}
 $('run').addEventListener('click', runLocal);
 $('rerun').addEventListener('click', runLocal);
 </script>
