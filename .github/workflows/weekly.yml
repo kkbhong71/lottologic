@@ -46,11 +46,12 @@ jobs:
           python lotto_ultimate.py "../${{ steps.csv.outputs.file }}" \
             --sets 10 --ml --ga --net --swarm --seed auto --vrf 2 --tests --backtest 30 \
             --out ../results --json
+          cp ../results/BACKTEST_REPORT.md ../ 2>/dev/null || true
 
       - name: Commit results
         run: |
           git config user.name  "lotto-ultimate-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add results/
+          git add results/ BACKTEST_REPORT.md
           git diff --cached --quiet && echo "변경 없음" || \
             (git commit -m "results: auto-run $(date -u +'%Y-%m-%d %H:%M UTC')" && git push)
