@@ -101,12 +101,37 @@ const LU = (() => {
     for (let i = 0; i < N_BALL; i++) { let s = 0; for (let j = 0; j < N_BALL; j++) if (i !== j) s += (P[i][j] / n) / (p[i] * p[j] + 1e-12); out.push(s); }
     return norm(out);
   }
-  const SCORE_WEIGHTS = { frequency: 1.0, recency: 1.2, gap: 1.0, zscore: 0.8, momentum: 1.0, pair: 0.8, markov: 1.0, lift: 0.8 };
+  function scoreSigmoidCold(A) {
+    /** 시그모이드 콜드번호 재평가 — 장기 미출현에 비선형 상한. c=기대갭(7.5), k=0.3 */
+    const last = new Array(N_BALL).fill(-1);
+    for (let t = 0; t < A.length; t++) for (let b = 0; b < N_BALL; b++) if (A[t][b]) last[b] = t;
+    const c = N_BALL / N_PICK;
+    return norm(last.map(l => 1.0 / (1.0 + Math.exp(-0.3 * ((A.length - 1 - l) - c)))));
+  }
+  function scoreMultiWindow(hist, windows = [30, 50, 100]) {
+    /** 다중 윈도우 민감도 — 복수 시간 범위 빈도의 정규화 평균. 안정 신호일수록 높음 */
+    const A = appearMatrix(hist);
+    const allW = [...windows, hist.length];
+    const normed = allW.map(w => { const seg = A.slice(-Math.min(w, A.length)); return norm(colMean(seg)); });
+    return norm(Array.from({ length: N_BALL }, (_, b) => normed.reduce((a, row) => a + row[b], 0) / normed.length));
+  }
+  function scoreDirichlet(hist, alpha0 = 1.0) {
+    /** Dirichlet 사후확률 — 균등 사전(α₀) + 관측 빈도 → 사후 기대값 */
+    const f = new Array(N_BALL).fill(0);
+    for (const nums of hist) for (const n of nums) f[n - 1]++;
+    const total = f.reduce((a, b) => a + b, 0);
+    return norm(f.map(v => (v + alpha0) / (total + N_BALL * alpha0)));
+  }
+  const SCORE_WEIGHTS = { frequency: 1.0, recency: 1.2, gap: 1.0, zscore: 0.8, sigmoid_cold: 0.7,
+                          momentum: 1.0, pair: 0.8, markov: 1.0, lift: 0.8,
+                          multi_window: 0.9, dirichlet: 0.6 };
   const EXTRA_WEIGHTS = { ml: 1.5, network: 0.8 };
   function compositeScores(hist, extra = null) {
     const A = appearMatrix(hist), P = cooc(A);
     const parts = { frequency: scoreFrequency(A), recency: scoreRecency(A), gap: scoreGap(A), zscore: scoreZscore(A),
-                    momentum: scoreMomentum(A), pair: scorePair(P), markov: scoreMarkov(hist), lift: scoreLift(A, P) };
+                    sigmoid_cold: scoreSigmoidCold(A), momentum: scoreMomentum(A),
+                    pair: scorePair(P), markov: scoreMarkov(hist), lift: scoreLift(A, P),
+                    multi_window: scoreMultiWindow(hist), dirichlet: scoreDirichlet(hist) };
     const w = { ...SCORE_WEIGHTS };
     if (extra) for (const k in extra) { parts[k] = extra[k]; w[k] = EXTRA_WEIGHTS[k] ?? 1.0; }
     const keys = Object.keys(parts), wsum = keys.reduce((a, k) => a + w[k], 0);

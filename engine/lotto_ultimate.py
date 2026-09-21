@@ -132,7 +132,18 @@ def score_gap(A):              # 3 갭 — 마지막 출현 후 경과 회차(�
 
 def score_zscore(A):           # 4 Z-Score — 기대 출현수 대비 편차(음수=콜드). 콜드 우선이면 부호 반전
     f = A.sum(0); mu = f.mean(); sd = f.std() or 1
-    return _norm(-(f - mu) / sd)   # 콜드번호 재평가 방향(시그모이드 아이디어 계승)
+    return _norm(-(f - mu) / sd)
+
+def score_sigmoid_cold(A):
+    """시그모이드 콜드번호 재평가 — 장기 미출현 번호에 비선형 가산.
+    원리: 갭이 클수록 "평균 회귀"로 나올 차례라는 직관이 있지만, 선형 갭 점수는
+    극단적으로 오래 안 나온 번호를 과대평가한다. 시그모이드(로지스틱)로 꺾어 상한을 둔다.
+    gap → 1/(1+exp(-k*(gap-c))) where c=기대갭(45/6≈7.5), k=0.3(완만한 곡선).
+    """
+    last = np.array([np.max(np.where(A[:, b])[0]) if A[:, b].any() else -1 for b in range(N_BALL)])
+    gap = len(A) - 1 - last
+    c = N_BALL / N_PICK  # 기대 재출현 간격 ≈ 7.5
+    return _norm(1.0 / (1.0 + np.exp(-0.3 * (gap - c))))
 
 def score_momentum(A, short=20, long=100):   # 5 모멘텀 — 단기 출현율 / 장기 출현율
     s = A[-short:].mean(0); l = A[-long:].mean(0) + 1e-9
@@ -156,8 +167,38 @@ def score_lift(A):             # 8 Lift 연관규칙 — P(A∩B)/(P(A)P(B)) 연
     lift = joint / (np.outer(p, p) + 1e-12); np.fill_diagonal(lift, 0)
     return _norm(lift.sum(1))
 
-SCORE_WEIGHTS = dict(frequency=1.0, recency=1.2, gap=1.0, zscore=0.8,
-                     momentum=1.0, pair=0.8, markov=1.0, lift=0.8)
+def score_multi_window(hist, windows=(30, 50, 100)):
+    """다중 윈도우 민감도 — 복수 시간 범위의 빈도를 비교해 안정적인 신호를 강조.
+    원리: 30회에서만 높고 100회에서는 평범한 번호 = 일시적 핫. 모든 윈도우에서 높은 번호 = 안정 신호.
+    각 윈도우의 빈도 비율(출현수/윈도우길이)을 정규화 → 평균. 안정 번호일수록 점수 ↑.
+    전체 기간은 항상 포함(hist 전체).
+    """
+    A = appear_matrix(hist)
+    parts = []
+    for w in list(windows) + [len(hist)]:
+        seg = A[-min(w, len(A)):]
+        parts.append(seg.mean(0))
+    stacked = np.array(parts)  # (n_windows × 45)
+    # 각 윈도우를 0~1 정규화 후 평균 — 모든 윈도우에서 높은 번호가 높게 남음
+    normed = np.array([_norm(row) for row in stacked])
+    return _norm(normed.mean(0))
+
+def score_dirichlet(hist, alpha0: float = 1.0):
+    """Dirichlet 사전확률 최적화 — 베이지안 추정으로 각 번호의 사후 출현확률을 계산.
+    원리: 균등 사전(α₀=1)에서 출발해 관측 빈도를 더하면 사후 Dirichlet가 된다.
+    α₀를 높이면 사전 믿음(균등)이 강해지고, 낮추면 데이터에 더 기댄다.
+    경험적 베이즈: α₀를 고정된 값으로 두되, 관측 분산과 이론 분산의 비율로
+    "데이터가 균등에서 얼마나 벗어났는가"를 반영한다.
+    """
+    f = np.bincount(hist.ravel(), minlength=N_BALL + 1)[1:].astype(float)
+    total = f.sum()
+    # 사후 기대값: (f + α₀) / (total + 45*α₀)
+    post = (f + alpha0) / (total + N_BALL * alpha0)
+    return _norm(post)
+
+SCORE_WEIGHTS = dict(frequency=1.0, recency=1.2, gap=1.0, zscore=0.8, sigmoid_cold=0.7,
+                     momentum=1.0, pair=0.8, markov=1.0, lift=0.8,
+                     multi_window=0.9, dirichlet=0.6)
 
 EXTRA_WEIGHTS = dict(ml=1.5, network=0.8)   # Step 2: ML은 다른 점수의 정보를 종합하므로 가중 ↑
 
@@ -165,8 +206,10 @@ def composite_scores(hist: np.ndarray, weights=SCORE_WEIGHTS, extra: dict | None
     """8종 통계 + (선택) extra={'ml':..., 'network':...} 를 가중 평균 → 45볼 종합점수."""
     A = appear_matrix(hist)
     parts = dict(frequency=score_frequency(A), recency=score_recency(A), gap=score_gap(A),
-                 zscore=score_zscore(A), momentum=score_momentum(A), pair=score_pair(A, hist),
-                 markov=score_markov(hist), lift=score_lift(A))
+                 zscore=score_zscore(A), sigmoid_cold=score_sigmoid_cold(A),
+                 momentum=score_momentum(A), pair=score_pair(A, hist),
+                 markov=score_markov(hist), lift=score_lift(A),
+                 multi_window=score_multi_window(hist), dirichlet=score_dirichlet(hist))
     w = dict(weights)
     for k, v in (extra or {}).items():
         parts[k] = v; w[k] = EXTRA_WEIGHTS.get(k, 1.0)
@@ -344,10 +387,16 @@ def backtest(df: pd.DataFrame, n_rounds: int = 100, sets_per_round: int = 5, con
         means = x[idx].mean(1); return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
     from scipy.stats import ttest_rel
     t, p = ttest_rel(m, c)
+    # 필요 표본 크기 계산 — "현재 관측된 효과 크기가 유의하려면 몇 회차가 더 필요한가"
+    # Cohen's d = |mean_diff| / pooled_sd, 필요 n ≈ (2 × (z_α + z_β)² / d²) (양측 α=0.05, β=0.2)
+    diff = m - c; d_obs = abs(diff.mean()) / (diff.std() or 1e-9)
+    z_alpha, z_beta = 1.96, 0.84  # α=0.05 양측, 검정력 80%
+    n_needed = int(math.ceil(2 * (z_alpha + z_beta) ** 2 / max(d_obs, 1e-9) ** 2)) if d_obs > 0.01 else 99999
     return dict(rounds=n_rounds, model_mean=float(m.mean()), model_ci=boot_ci(m),
                 control_mean=float(c.mean()), control_ci=boot_ci(c), theory=6 * 6 / 45,
                 paired_t=float(t), p_value=float(p),
-                match3plus_rate=float(np.mean(m >= 3)))
+                match3plus_rate=float(np.mean(m >= 3)),
+                effect_d=float(d_obs), n_needed=n_needed)
 
 
 # =============================================================================
@@ -519,6 +568,7 @@ def main():
         print(f"  이론값 {r['theory']:.3f} | 대응 t={r['paired_t']:.2f}, p={r['p_value']:.3f}")
         verdict = "무작위와 통계적 동등(정직 작동)" if r["p_value"] > 0.05 else "차이 감지 — 다중비교 보정 필요"
         print(f"  판정: {verdict}")
+        print(f"  효과크기 d={r['effect_d']:.3f} | 유의하려면 약 {r['n_needed']}회차 필요 (검정력 80%)")
     if a.json:
         jp = os.path.join(a.out, "latest.json")
         with open(jp, "w", encoding="utf-8") as f:
