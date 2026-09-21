@@ -219,7 +219,7 @@ function render(R){
   const sig = tests.filter(t=>t.sig_adj).length;
   $('stat').innerHTML = `
     <div><div class="v">${sig}/${tests.length||15}</div><div class="k">보정 후 유의한 검정 (0이면 무작위와 동등)</div></div>
-    ${bt?`<div><div class="v">${fmt(bt.model_mean,2)} <small style="font-size:14px;color:var(--ink2)">vs ${fmt(bt.control_mean,2)}</small></div><div class="k">백테스트 ${bt.rounds}회 평균 일치 · 모델 vs 대조군 (p=${fmt(bt.p_value,2)})</div></div>`:''}
+    ${bt?`<div><div class="v">${fmt(bt.model_mean,2)} <small style="font-size:14px;color:var(--ink2)">vs ${fmt(bt.control_mean,2)}</small></div><div class="k">백테스트 ${bt.rounds}회 평균 일치 · 모델 vs 대조군 (p=${fmt(bt.p_value,2)})${bt.n_needed?` · 유의까지 약 ${bt.n_needed}회차 필요`:''}</div></div>`:''}
     <div><div class="v">${tr.n??0}</div><div class="k">채점 완료 세트 수${tr.mean_hits!=null?` · 평균 일치 ${fmt(tr.mean_hits,2)}개`:''}</div></div>
     ${R.ml_prob?`<div><div class="v">${fmt(R.ml_prob.reduce((s,x)=>s+x,0)/45,3)}</div><div class="k">ML 출현확률 평균 (이론 0.133 — 같을수록 과적합 없음)</div></div>`:''}`;
 
