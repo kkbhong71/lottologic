@@ -399,6 +399,76 @@ def backtest(df: pd.DataFrame, n_rounds: int = 100, sets_per_round: int = 5, con
                 effect_d=float(d_obs), n_needed=n_needed)
 
 
+def generate_report(R, out_dir="."):
+    """BACKTEST_REPORT.md 자동 생성 — Actions 실행마다 최신 상태로 갱신."""
+    import os, datetime
+    au = R.get("audit", {}); bt = R.get("backtest", {}); tr = R.get("tracker", {})
+    tests = R.get("tests", []); seed = R.get("seed", {})
+    lines = [
+        "# BACKTEST REPORT — 자체 검증 리포트",
+        f"> 자동 생성: {R.get('generated_at', 'N/A')} | 데이터: {au.get('first','')}~{au.get('last','')}회 ({au.get('rounds','')}회)",
+        f"> 난수 시드: {seed.get('source','N/A')} | 커밋: {seed.get('commit','N/A')}",
+        "",
+        "## 데이터 감사",
+        f"- 번호별 출현: {au.get('freq_min','')}~{au.get('freq_max','')}회",
+        f"- 균등성 χ²={au.get('chi2',0):.1f}, p={au.get('p_uniform',0):.3f}" + (" → 무작위와 부합" if au.get('p_uniform',0)>0.05 else " → 편향 의심"),
+        "",
+    ]
+    if bt:
+        verdict = "무작위와 통계적 동등" if bt.get('p_value',0)>0.05 else "차이 감지 — 추가 검증 필요"
+        lines += [
+            "## Walk-Forward 백테스트",
+            f"- 라운드: 최근 {bt.get('rounds','')}회차 | 라운드당 대조군 100세트",
+            f"- 모델 평균 일치: **{bt.get('model_mean',0):.3f}** [{bt.get('model_ci',['',''])[0]:.3f}, {bt.get('model_ci',['',''])[1]:.3f}]",
+            f"- 대조군 평균 일치: **{bt.get('control_mean',0):.3f}** [{bt.get('control_ci',['',''])[0]:.3f}, {bt.get('control_ci',['',''])[1]:.3f}]",
+            f"- 이론값: {bt.get('theory',0):.3f}",
+            f"- 대응 t={bt.get('paired_t',0):.2f}, p={bt.get('p_value',0):.3f}",
+            f"- **판정: {verdict}**",
+            f"- 효과 크기 d={bt.get('effect_d',0):.3f} | 유의(검정력 80%)까지 약 {bt.get('n_needed','')}회차 필요",
+            "",
+        ]
+    if tests:
+        n_raw = sum(1 for t in tests if t.get('sig_raw'))
+        n_adj = sum(1 for t in tests if t.get('sig_adj'))
+        lines += [
+            "## 무작위성 검정 배터리 (15종, Holm-Bonferroni)",
+            f"- 원 p<0.05: {n_raw}/15 | 보정 후 유의: **{n_adj}/15**" + (" → 무작위와 통계적 동등" if n_adj==0 else " → 추가 조사 필요"),
+            "",
+            "| 검정 | p | p_adj | 내용 |",
+            "|------|---|-------|------|",
+        ]
+        for t in tests:
+            flag = " ★" if t.get('sig_adj') else ""
+            lines.append(f"| {t.get('name','')} | {t.get('p',0):.3f} | {t.get('p_adj',0):.3f}{flag} | {t.get('desc','')} |")
+        lines.append("")
+    if tr and tr.get('n', 0) > 0:
+        lines += [
+            "## 예측 추적 누적",
+            f"- 채점 완료: {tr.get('n',0)}세트",
+            f"- 평균 일치: **{tr.get('mean_hits',0):.2f}개** (무작위 기대 0.80)",
+            f"- 3개+ 일치: {tr.get('match3plus',0)}회",
+            "",
+            "| 회차 | 번호 | 일치 |",
+            "|------|------|------|",
+        ]
+        for e in (tr.get('recent', []) or [])[-20:]:
+            lines.append(f"| {e.get('round','')} | {' '.join(str(n) for n in e.get('nums',[]))} | {e.get('hits','')} |")
+        lines.append("")
+    lines += [
+        "## 정직한 요약",
+        "이 시스템은 자신이 무작위보다 낫다고 주장하지 않습니다. 위 백테스트와 검정이 매주 그 주장을 다시 확인합니다.",
+        f"현재 효과 크기(d={bt.get('effect_d',0):.3f})로는 약 {bt.get('n_needed','')}회차의 데이터가 쌓여야 통계적으로 유의한 차이를 판정할 수 있습니다.",
+        "유일한 수학적 레버는 인기 조합 회피(기대 배당금 최적화)이며, 이 이득은 당첨 시에만 실현됩니다.",
+        "",
+        "---",
+        f"*자동 생성: LOTTO ULTIMATE engine · {R.get('generated_at', '')}*",
+    ]
+    rp = os.path.join(out_dir, "BACKTEST_REPORT.md")
+    with open(rp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"📄 리포트 저장: {rp}")
+
+
 # =============================================================================
 # [LAYER 7] PREDICTION TRACKER — 사전 등록 → 사후 채점 (prediction_log.csv)
 # =============================================================================
@@ -577,6 +647,8 @@ def main():
         with open(os.path.join(a.out, f"round_{nxt}.json"), "w", encoding="utf-8") as f:
             json.dump(R, f, ensure_ascii=False, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
         print(f"\n💾 JSON 저장: {jp}")
+        # BACKTEST_REPORT.md 자동 생성 — Actions가 매주 갱신
+        generate_report(R, a.out)
     print("\n⚠ 면책: 로또는 완전 무작위입니다. 본 도구는 기대 배당금 최적화·교육 목적이며 당첨을 보장하지 않습니다.")
     print("   도박 문제 상담: 1336 (한국도박문제예방치유원)")
 
