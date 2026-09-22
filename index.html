@@ -250,6 +250,12 @@ footer strong{color:var(--ink)}
       <div id="lesson6-result"></div>
     </div>
 
+    <div class="lesson" id="lesson7">
+      <h3><span class="num">7</span> 더 강력한 AI도 이길 수 없다</h3>
+      <p class="desc">RF+GB, XGBoost, LSTM(시퀀스 모델)… 더 복잡한 모델을 쓰면 당첨번호를 더 잘 맞출까요? GitHub Actions가 실제 데이터로 돌린 비교 결과를 보여줍니다. 이론값(6/45 = 0.1333)에 가까울수록 "예측력이 없다(=무작위와 같다)"는 뜻입니다.</p>
+      <div id="lesson7-result" class="edu-result" style="color:var(--ink2)">latest.json이 로드되면 ML 비교 결과가 여기에 표시됩니다. Actions가 한 번 이상 실행된 후에 볼 수 있습니다.</div>
+    </div>
+
   </div>
 </section>
 
@@ -324,6 +330,24 @@ function render(R){
     $('tests').innerHTML = `<table><thead><tr><th>검정</th><th>원 p</th><th>보정 p</th><th>내용</th></tr></thead><tbody>
       ${tests.map(t=>`<tr><td>${t.name}</td><td class="n">${fmt(t.p)}</td><td class="n ${t.sig_adj?'flag':'ok'}">${fmt(t.p_adj)}</td><td>${t.desc}</td></tr>`).join('')}
     </tbody></table>`;
+  }
+
+  // 7교시: ML 비교 결과 (Actions가 생성한 데이터)
+  const mlc = R.ml_comparison;
+  if(mlc){
+    const models = Object.entries(mlc);
+    $('lesson7-result').innerHTML = `
+      <table style="margin-bottom:12px"><thead><tr><th>모델</th><th>출현번호 평균확률</th><th>표준편차</th><th>이론값 대비</th><th>판정</th></tr></thead><tbody>
+      ${models.map(([name,s])=>`<tr><td>${name}</td><td class="n">${s.mean.toFixed(4)}</td><td class="n">${s.std.toFixed(4)}</td><td class="n">${s.vs_theory>=0?'+':''}${s.vs_theory.toFixed(4)}</td>
+        <td class="${Math.abs(s.vs_theory)<0.005?'ok':'flag'}">${Math.abs(s.vs_theory)<0.005?'이론값과 동등':'약간 편차'}</td></tr>`).join('')}
+      </tbody></table>
+      <div style="font-size:13px;color:var(--ink2)">
+        <b>읽는 법:</b> "출현번호 평균확률"은 실제로 나온 6개 번호에 모델이 부여한 확률의 평균입니다.
+        이론값 6/45 = 0.1333은 "모든 번호에 균등한 확률을 줬다"는 뜻이고, 이보다 높으면 "나올 번호에 더 높은 확률을 줬다"는 뜻입니다.
+        <br><br>결과를 보면 RF+GB, XGBoost, 시퀀스 모델 <b>모두</b> 이론값(0.1333) 근처입니다.
+        ${mlc.Sequence && mlc.Sequence.vs_theory > 0.02 ? '시퀀스 모델은 약간 높아 보이지만, 이는 과적합(학습 데이터의 패턴을 암기)의 결과이지 예측력이 아닙니다. 새 데이터에서는 이론값으로 돌아갑니다.' : ''}
+        <br><br><b>결론:</b> 더 복잡한 모델을 써도 독립 추첨의 벽은 넘을 수 없습니다. 이것이 LOTTO ULTIMATE이 ML을 "예측"이 아니라 "점수 합산의 한 요소"로만 사용하는 이유입니다.
+      </div>`;
   }
 
   // 추적 기록
