@@ -69,6 +69,134 @@ def score_ml(A: np.ndarray, models=None) -> np.ndarray:
 
 
 # =============================================================================
+# [ML-ADV] XGBoost + 간이 시퀀스 모델 (LSTM 대용) — 교육용 시연
+#   목적: "더 강력한 모델을 써도 독립 추첨에서는 이론값(0.133)으로 수렴한다"를 데이터로 보여줌
+#   XGBoost: 같은 피처 7개에 gradient boosted trees → RF+GB와 비교
+#   시퀀스 모델: 직전 10회차의 출현 패턴(10×45)을 입력 → 시그모이드 1층 (LSTM 대용, 순수 numpy)
+#     실제 LSTM은 tensorflow/pytorch가 필요하지만, 교육 목적에서는 "시퀀스를 입력으로 받는 학습 모델"이
+#     무작위 데이터에서 어떤 성능을 보이는지를 보여주는 것이 핵심.
+# =============================================================================
+def train_xgb(A: np.ndarray, train_rounds: int = 400, seed: int | None = None):
+    """XGBoost 분류기 학습 — RF+GB와 동일 피처, 동일 표본."""
+    try:
+        from xgboost import XGBClassifier
+    except ImportError:
+        try:
+            from lightgbm import LGBMClassifier as XGBClassifier
+        except ImportError:
+            print("  ⚠ xgboost/lightgbm 미설치 — RF+GB 결과를 대용합니다")
+            return None
+    T = len(A); Xs, ys = [], []
+    for t in range(max(101, T - train_rounds), T):
+        Xs.append(_ball_features(A, t)); ys.append(A[t])
+    X, y = np.vstack(Xs), np.concatenate(ys)
+    seed = seed if seed is not None else _rng.randrange(10**6)
+    model = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05,
+                          subsample=0.8, use_label_encoder=False, eval_metric='logloss',
+                          verbosity=0, random_state=seed)
+    model.fit(X, y)
+    return model
+
+def score_xgb(A: np.ndarray, model=None):
+    """XGBoost 45볼 출현확률."""
+    if model is None: model = train_xgb(A)
+    if model is None: return None, None
+    X = _ball_features(A, len(A))
+    p = model.predict_proba(X)[:, 1]
+    return _norm(p), p
+
+
+def _seq_features(A: np.ndarray, t: int, window: int = 10) -> np.ndarray:
+    """직전 window회차의 출현 패턴을 1차원으로 펼침 (window×45 → 450차원)."""
+    start = max(0, t - window)
+    seg = A[start:t].astype(float)
+    if len(seg) < window:
+        seg = np.vstack([np.zeros((window - len(seg), N_BALL)), seg])
+    return seg.ravel()
+
+def train_sequence_model(A: np.ndarray, train_rounds: int = 400, window: int = 10, seed: int | None = None):
+    """간이 시퀀스 모델 (1층 시그모이드, LSTM 대용) — 순수 numpy.
+    W(450×1), b(1) 를 SGD로 학습. 이진 교차엔트로피 손실.
+    LSTM과 다른 점: 게이트 구조 없음, 순환 없음(단순 윈도우). 교육 목적의 핵심은 동일:
+    "시퀀스 입력 → 학습 → 예측"이 무작위에서 작동하는지를 보여줌."""
+    rng = np.random.default_rng(seed or _rng.randrange(10**6))
+    T = len(A); dim = window * N_BALL
+    W = rng.normal(0, 0.01, (dim, 1)).astype(float)
+    b = np.float64(0.0)
+    lr = 0.001
+    for epoch in range(3):
+        for t in range(max(window + 1, T - train_rounds), T):
+            x = _seq_features(A, t, window).reshape(1, -1)  # (1, 450)
+            z_val = float((x @ W)[0, 0] + b)
+            z_val = np.clip(z_val, -20, 20)
+            p = 1 / (1 + np.exp(-z_val))
+            y_avg = A[t].mean()  # 평균 출현(6/45)
+            grad = (p - y_avg)
+            W -= lr * grad * x.T
+            b -= lr * grad
+    return W, b, window
+
+def score_sequence(A: np.ndarray, model=None):
+    """간이 시퀀스 모델 45볼 출현확률."""
+    if model is None: model = train_sequence_model(A)
+    W, b_val, window = model
+    b_val = float(np.asarray(b_val).ravel()[0])
+    probs = np.zeros(N_BALL)
+    base_x = _seq_features(A, len(A), window).reshape(1, -1)
+    for ball in range(N_BALL):
+        x_b = base_x.copy()
+        for w in range(window):
+            x_b[0, w * N_BALL + ball] *= 2.0
+        z = np.clip(float((x_b @ W)[0, 0]) + b_val, -20, 20)
+        probs[ball] = 1 / (1 + np.exp(-z))
+    return _norm(probs), probs
+
+
+def ml_comparison(A: np.ndarray, n_test: int = 50):
+    """RF+GB vs XGBoost vs 시퀀스 모델 walk-forward 비교 — 교육용 시연.
+    각 모델이 n_test 회차에 대해 "다음 회차 출현 번호를 얼마나 높은 확률로 잡았는가"를 측정.
+    측정치: 출현 번호 6개의 평균 예측 확률 (높을수록 좋음, 이론값 0.133).
+    """
+    T = len(A)
+    results = {name: [] for name in ['RF+GB', 'XGBoost', 'Sequence', 'Random']}
+    rf_gb = train_ml(A[:T - n_test])
+    xgb = train_xgb(A[:T - n_test])
+    seq = train_sequence_model(A[:T - n_test])
+
+    for t in range(T - n_test, T):
+        actual = np.where(A[t])[0]  # 출현 번호 인덱스
+        X = _ball_features(A[:t], t)
+
+        # RF+GB
+        p_rf = 0.5 * rf_gb[0].predict_proba(X)[:, 1] + 0.5 * rf_gb[1].predict_proba(X)[:, 1]
+        results['RF+GB'].append(float(p_rf[actual].mean()))
+
+        # XGBoost
+        if xgb is not None:
+            p_xgb = xgb.predict_proba(X)[:, 1]
+            results['XGBoost'].append(float(p_xgb[actual].mean()))
+        else:
+            results['XGBoost'].append(float(p_rf[actual].mean()))
+
+        # Sequence
+        _, p_seq = score_sequence(A[:t], seq)
+        results['Sequence'].append(float(p_seq[actual].mean()))
+
+        # Random baseline
+        results['Random'].append(6 / 45)
+
+    summary = {}
+    for name, vals in results.items():
+        arr = np.array(vals)
+        summary[name] = {
+            'mean': round(float(arr.mean()), 4),
+            'std': round(float(arr.std()), 4),
+            'vs_theory': round(float(arr.mean() - 6/45), 4),
+        }
+    return summary, results
+
+
+# =============================================================================
 # [NET] 네트워크 분석 — 동반출현 가중 그래프
 #   허브 점수: 가중 차수(다른 번호들과 함께 나온 총 횟수)를 기대치로 나눈 초과분
 #   커뮤니티: 스펙트럴 클러스터링 k=8 (v2.1 계승). 조합 생성 시 커뮤니티 다양성 제약에 사용.

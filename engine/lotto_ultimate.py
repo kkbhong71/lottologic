@@ -560,6 +560,15 @@ def main():
         extra["ml"], raw_p = X.score_ml(A); R["ml_prob"] = [round(float(p), 4) for p in raw_p]
         print(f"\n🧠 ML(RF+GB) 다음회차 출현확률: 평균 {raw_p.mean():.3f} (이론 0.133) | "
               f"최고 {raw_p.max():.3f}(#{raw_p.argmax()+1}) 최저 {raw_p.min():.3f}(#{raw_p.argmin()+1})")
+        # 교육용: XGBoost + 시퀀스 모델 비교
+        try:
+            ml_cmp, _ = X.ml_comparison(A, n_test=min(20, len(hist) - 200))
+            R["ml_comparison"] = ml_cmp
+            print("  📊 ML 비교 (교육용):")
+            for name, s in ml_cmp.items():
+                print(f"     {name:<10s} 평균={s['mean']:.4f} ±{s['std']:.4f}  vs이론={s['vs_theory']:+.4f}")
+        except Exception as e:
+            print(f"  ⚠ ML 비교 건너뜀: {e}")
     if a.net:
         extra["network"], labels, _ = X.network_analysis(A); R["communities"] = [int(l) for l in labels]
         print("\n🕸️ 네트워크 커뮤니티 8개:")
